@@ -31,11 +31,11 @@ function matches(tx: Transaction, filter: FilterKey) {
 }
 
 export default function TransactionsPage() {
-  const { transactions } = useStore();
+  const { transactions, payments, debts, budget } = useStore();
   const [filter, setFilter] = useState<FilterKey>("all");
 
-  const metrics = getDashboardMetrics(transactions);
-  const { selfTransferExcluded } = getInsights(transactions);
+  const metrics = getDashboardMetrics(transactions, payments, debts, budget);
+  const { selfTransferExcluded } = getInsights(transactions, debts);
   const visible = transactions.filter((tx) => matches(tx, filter));
 
   return (
@@ -72,7 +72,7 @@ export default function TransactionsPage() {
         })}
       </div>
 
-      <Section title="July 2026">
+      <Section title={metrics.monthLabel}>
         {visible.length > 0 ? (
           <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
             {visible.map((tx) => (

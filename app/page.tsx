@@ -37,8 +37,8 @@ const heroPill: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { transactions, payments, debts, goals, limits } = useStore();
-  const metrics = getDashboardMetrics(transactions, payments, debts);
+  const { transactions, payments, debts, goals, limits, budget } = useStore();
+  const metrics = getDashboardMetrics(transactions, payments, debts, budget);
   const girlfriendBreakdown = getGirlfriendBreakdown(transactions);
 
   const categoryRows = getBudgetGroups(transactions, limits)
@@ -54,7 +54,10 @@ export default function DashboardPage() {
   const topGoals = goals.slice(0, 2);
 
   return (
-    <AppShell title="Today" subtitle={`July 2026 · Day ${metrics.daysElapsed} of ${metrics.daysInMonth}`}>
+    <AppShell
+      title="Today"
+      subtitle={`${metrics.monthLabel} · Day ${metrics.daysElapsed} of ${metrics.daysInMonth}`}
+    >
       {/* Hero: safe to spend today */}
       <div className="relative mb-4 overflow-hidden rounded-3xl bg-ink p-6 text-white shadow-soft dark:bg-white/[0.07] dark:shadow-none">
         <div

@@ -1,5 +1,5 @@
 import { defaultBudget, defaultLimits } from "./mock-data";
-import type { Debt, SavingsGoal, ScheduledPayment, Transaction } from "./types";
+import type { Budget, Debt, SavingsGoal, ScheduledPayment, Transaction } from "./types";
 
 export const currency = new Intl.NumberFormat("es-MX", {
   style: "currency",
@@ -19,19 +19,41 @@ export const formatDate = (date: string) =>
     month: "short"
   }).format(new Date(`${date}T12:00:00`));
 
-// Phase 1 runs against a fixed mocked month: July 2026, viewed on day 2.
-export const demoMonth = { year: 2026, month: 6, label: "July 2026" };
-const daysInMonth = 31;
-const daysElapsed = 2;
-const daysLeft = daysInMonth - daysElapsed + 1;
-
 const monthYearFormatter = new Intl.DateTimeFormat("en", {
   month: "long",
   year: "numeric"
 });
 
-export function monthLabelFromNow(months: number) {
-  return monthYearFormatter.format(new Date(demoMonth.year, demoMonth.month + months, 1));
+const monthNameFormatter = new Intl.DateTimeFormat("en", { month: "long" });
+
+// Everything time-based derives from the real current date. Passing an explicit
+// `now` is only used for tests and keeps SSR/CSR renders consistent within a day.
+export function getMonthContext(now: Date = new Date()) {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysElapsed = now.getDate();
+  const daysLeft = Math.max(daysInMonth - daysElapsed + 1, 1);
+
+  return {
+    year,
+    month,
+    daysInMonth,
+    daysElapsed,
+    daysLeft,
+    label: monthYearFormatter.format(now),
+    monthName: monthNameFormatter.format(now)
+  };
+}
+
+function inMonth(dateIso: string, year: number, month: number) {
+  // transactionDate is a plain "YYYY-MM-DD" string.
+  const [y, m] = dateIso.split("-").map(Number);
+  return y === year && m - 1 === month;
+}
+
+export function monthLabelFromNow(months: number, now: Date = new Date()) {
+  return monthYearFormatter.format(new Date(now.getFullYear(), now.getMonth() + months, 1));
 }
 
 export type SpendStatus = "safe" | "tight" | "over";
@@ -89,9 +111,19 @@ export function getCommitments(
 export function getDashboardMetrics(
   transactions: Transaction[],
   payments: ScheduledPayment[] = [],
-  debts: Debt[] = []
+  debts: Debt[] = [],
+  budget: Budget = defaultBudget,
+  now: Date = new Date()
 ) {
-  const spending = transactions.filter(isSpending);
+  const { year, month, daysInMonth, daysElapsed, daysLeft, label, monthName } =
+    getMonthContext(now);
+
+  // The spend cap is always income minus the savings reserved first, so it
+  // stays consistent whenever the budget is edited.
+  const monthlySpendCap = Math.max(budget.fixedMonthlyIncome - budget.requiredSavings, 0);
+
+  const thisMonth = transactions.filter((tx) => inMonth(tx.transactionDate, year, month));
+  const spending = thisMonth.filter(isSpending);
   const actualSpend = spending.reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 
   // Scheduled bills and debt payments still due this month get reserved
@@ -104,10 +136,10 @@ export function getDashboardMetrics(
     0
   );
 
-  const remainingBudget = defaultBudget.monthlySpendCap - actualSpend;
+  const remainingBudget = monthlySpendCap - actualSpend;
   const discretionaryRemaining = remainingBudget - committedRemaining;
   const safeToSpendToday = discretionaryRemaining / daysLeft;
-  const dailyBaseline = (defaultBudget.monthlySpendCap - committedTotal) / daysInMonth;
+  const dailyBaseline = (monthlySpendCap - committedTotal) / daysInMonth;
 
   const ratio = dailyBaseline > 0 ? safeToSpendToday / dailyBaseline : 0;
   const spendStatus: SpendStatus =
@@ -119,15 +151,15 @@ export function getDashboardMetrics(
     (observedPace * daysElapsed + dailyBaseline * (daysInMonth - daysElapsed)) / daysInMonth;
   const projectedSpend =
     actualSpend + committedRemaining + blendedPace * (daysInMonth - daysElapsed);
-  const projectedRemaining = defaultBudget.monthlySpendCap - projectedSpend;
+  const projectedRemaining = monthlySpendCap - projectedSpend;
   const projectionStatus: SpendStatus =
     projectedRemaining < 0
       ? "over"
-      : projectedRemaining < defaultBudget.monthlySpendCap * 0.1
+      : projectedRemaining < monthlySpendCap * 0.1
         ? "tight"
         : "safe";
 
-  const girlfriendSpend = transactions.reduce(
+  const girlfriendSpend = thisMonth.reduce(
     (total, tx) =>
       total +
       (tx.status === "ignored" || tx.status === "duplicate_candidate"
@@ -141,10 +173,12 @@ export function getDashboardMetrics(
   ).length;
 
   return {
-    incomeThisMonth: defaultBudget.fixedMonthlyIncome,
-    requiredSavings: defaultBudget.requiredSavings,
-    actualSaved: defaultBudget.requiredSavings,
-    monthlySpendCap: defaultBudget.monthlySpendCap,
+    monthLabel: label,
+    monthName,
+    incomeThisMonth: budget.fixedMonthlyIncome,
+    requiredSavings: budget.requiredSavings,
+    actualSaved: budget.requiredSavings,
+    monthlySpendCap,
     actualSpend,
     remainingBudget,
     committedTotal,
@@ -165,7 +199,7 @@ export function getDashboardMetrics(
   };
 }
 
-export function getGoalEta(goal: SavingsGoal) {
+export function getGoalEta(goal: SavingsGoal, now: Date = new Date()) {
   const remaining = Math.max(goal.targetMxn - goal.savedMxn, 0);
 
   if (remaining === 0) {
@@ -177,10 +211,10 @@ export function getGoalEta(goal: SavingsGoal) {
   }
 
   const monthsLeft = Math.ceil(remaining / goal.monthlyMxn);
-  return { monthsLeft, label: monthLabelFromNow(monthsLeft), remaining };
+  return { monthsLeft, label: monthLabelFromNow(monthsLeft, now), remaining };
 }
 
-export function getDebtPayoff(debt: Debt) {
+export function getDebtPayoff(debt: Debt, now: Date = new Date()) {
   if (debt.balanceMxn <= 0) {
     return { monthsLeft: 0, label: "Paid off" };
   }
@@ -190,17 +224,19 @@ export function getDebtPayoff(debt: Debt) {
   }
 
   const monthsLeft = Math.ceil(debt.balanceMxn / debt.monthlyPaymentMxn);
-  return { monthsLeft, label: monthLabelFromNow(monthsLeft) };
+  return { monthsLeft, label: monthLabelFromNow(monthsLeft, now) };
 }
 
-export function getGirlfriendBreakdown(transactions: Transaction[]) {
+export function getGirlfriendBreakdown(transactions: Transaction[], now: Date = new Date()) {
+  const { year, month } = getMonthContext(now);
   const breakdown = new Map<string, number>();
 
   for (const tx of transactions) {
     if (
       tx.status === "ignored" ||
       tx.status === "duplicate_candidate" ||
-      tx.girlfriendAmountMxn <= 0
+      tx.girlfriendAmountMxn <= 0 ||
+      !inMonth(tx.transactionDate, year, month)
     ) {
       continue;
     }
@@ -255,9 +291,13 @@ function totalByCategories(transactions: Transaction[], categories: string[]) {
 
 export function getBudgetGroups(
   transactions: Transaction[],
-  limits: Record<string, number> = defaultLimits
+  limits: Record<string, number> = defaultLimits,
+  now: Date = new Date()
 ): BudgetGroup[] {
-  const girlfriendSpend = transactions.reduce(
+  const { year, month } = getMonthContext(now);
+  const thisMonth = transactions.filter((tx) => inMonth(tx.transactionDate, year, month));
+
+  const girlfriendSpend = thisMonth.reduce(
     (total, tx) =>
       total +
       (tx.status === "ignored" || tx.status === "duplicate_candidate"
@@ -275,13 +315,13 @@ export function getBudgetGroups(
       rows: [
         {
           label: "Subscriptions",
-          spent: totalByCategories(transactions, ["Subscriptions"]),
+          spent: totalByCategories(thisMonth, ["Subscriptions"]),
           limit: limit("Subscriptions"),
           detail: "HBO Max and similar recurring spend"
         },
         {
           label: "Digital services",
-          spent: totalByCategories(transactions, ["Digital services", "Devices"]),
+          spent: totalByCategories(thisMonth, ["Digital services", "Devices"]),
           limit: limit("Digital services"),
           detail: "Apple, iCloud, apps"
         }
@@ -293,19 +333,19 @@ export function getBudgetGroups(
       rows: [
         {
           label: "Uber rides",
-          spent: totalByMerchant(transactions, "Uber"),
+          spent: totalByMerchant(thisMonth, "Uber"),
           limit: limit("Uber rides"),
           detail: "All rides, before splitting beneficiaries"
         },
         {
           label: "Uber Eats",
-          spent: totalByMerchant(transactions, "Uber Eats"),
+          spent: totalByMerchant(thisMonth, "Uber Eats"),
           limit: limit("Uber Eats"),
           detail: "Tracked separately from rides"
         },
         {
           label: "Shopping & marketplaces",
-          spent: totalByCategories(transactions, flexibleCategories),
+          spent: totalByCategories(thisMonth, flexibleCategories),
           limit: limit("Shopping & marketplaces"),
           detail: "Amazon, MercadoPago, and clarified purchases"
         }
@@ -329,7 +369,7 @@ export function getBudgetGroups(
       rows: [
         {
           label: "Debt payments",
-          spent: totalByCategories(transactions, ["Debt payment"]),
+          spent: totalByCategories(thisMonth, ["Debt payment"]),
           limit: limit("Debt payments"),
           detail: "Didi Préstamos"
         }
@@ -338,18 +378,24 @@ export function getBudgetGroups(
   ];
 }
 
-export function getInsights(transactions: Transaction[], debts: Debt[] = []) {
-  const spending = transactions.filter(isSpending);
+export function getInsights(
+  transactions: Transaction[],
+  debts: Debt[] = [],
+  now: Date = new Date()
+) {
+  const { year, month } = getMonthContext(now);
+  const thisMonth = transactions.filter((tx) => inMonth(tx.transactionDate, year, month));
+  const spending = thisMonth.filter(isSpending);
 
-  const transportSpend = transactions
+  const transportSpend = thisMonth
     .filter((tx) => (tx.merchant === "Uber" || tx.merchant === "Uber Eats") && isSpending(tx))
     .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 
-  const selfTransferExcluded = transactions
+  const selfTransferExcluded = thisMonth
     .filter((tx) => tx.category === "Transfer to self" && tx.amountMxn < 0)
     .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 
-  const debtPayments = totalByCategories(transactions, ["Debt payment"]);
+  const debtPayments = totalByCategories(thisMonth, ["Debt payment"]);
   const totalDebtBalance = debts.reduce((total, d) => total + Math.max(d.balanceMxn, 0), 0);
 
   const largestTransaction = spending.reduce<Transaction | null>(

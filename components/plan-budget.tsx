@@ -2,25 +2,102 @@
 
 import { useState } from "react";
 import { Wand2, X } from "lucide-react";
-import { Card, ProgressBar, Section, StatusPill } from "@/components/ui";
+import { Card, ProgressBar, Section } from "@/components/ui";
 import {
   currency,
   getBudgetGroups,
   getDashboardMetrics,
   getProgressTone
 } from "@/lib/calculations";
-import { defaultBudget } from "@/lib/mock-data";
 import { useStore } from "@/lib/store";
 
 export function PlanBudget() {
-  const { transactions, payments, debts, limits, setLimit, rules, removeRule } = useStore();
+  const { transactions, payments, debts, limits, setLimit, rules, removeRule, budget, setBudget } =
+    useStore();
   const [editing, setEditing] = useState(false);
-  const metrics = getDashboardMetrics(transactions, payments, debts);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const metrics = getDashboardMetrics(transactions, payments, debts, budget);
   const groups = getBudgetGroups(transactions, limits);
-  const poolUsed = metrics.actualSpend / metrics.monthlySpendCap;
+  const poolUsed = metrics.monthlySpendCap > 0 ? metrics.actualSpend / metrics.monthlySpendCap : 0;
 
   return (
     <>
+      <Section
+        title="Monthly budget"
+        action={
+          <button
+            onClick={() => setEditingBudget((value) => !value)}
+            className="text-sm font-semibold text-emerald-700 dark:text-emerald-400"
+          >
+            {editingBudget ? "Done" : "Edit"}
+          </button>
+        }
+      >
+        <Card>
+          {editingBudget ? (
+            <div className="space-y-3">
+              <BudgetField
+                label="Monthly income"
+                value={budget.fixedMonthlyIncome}
+                onChange={(value) => setBudget({ fixedMonthlyIncome: value })}
+              />
+              <BudgetField
+                label="Savings reserved first"
+                value={budget.requiredSavings}
+                onChange={(value) => setBudget({ requiredSavings: value })}
+              />
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-sm text-ink/55 dark:text-cloud/55">
+                  Commission saved (%)
+                </span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="100"
+                  value={Math.round(budget.commissionSavingsRate * 100)}
+                  onChange={(event) =>
+                    setBudget({
+                      commissionSavingsRate: Math.min(Math.max(Number(event.target.value), 0), 100) / 100
+                    })
+                  }
+                  className="tnum min-h-10 w-24 rounded-lg border border-emerald-500/40 bg-white px-3 text-right text-sm font-semibold outline-none focus:border-emerald-500 dark:border-emerald-400/40 dark:bg-white/[0.06]"
+                />
+              </label>
+              <div className="flex items-center justify-between gap-3 border-t border-black/[0.05] pt-3 text-sm dark:border-white/[0.06]">
+                <span className="font-semibold">Spend cap (income − savings)</span>
+                <span className="tnum font-bold">{currency.format(metrics.monthlySpendCap)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-ink/55 dark:text-cloud/55">Monthly income</span>
+                <span className="tnum font-semibold">
+                  {currency.format(budget.fixedMonthlyIncome)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-ink/55 dark:text-cloud/55">Savings reserved first</span>
+                <span className="tnum font-semibold text-emerald-700 dark:text-emerald-400">
+                  −{currency.format(budget.requiredSavings)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-ink/55 dark:text-cloud/55">Commission saved</span>
+                <span className="tnum font-semibold">
+                  {Math.round(budget.commissionSavingsRate * 100)}%
+                </span>
+              </div>
+              <div className="flex justify-between gap-3 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
+                <span className="font-semibold">Monthly spend cap</span>
+                <span className="tnum font-bold">{currency.format(metrics.monthlySpendCap)}</span>
+              </div>
+            </div>
+          )}
+        </Card>
+      </Section>
+
       <Section title="Flexible pool">
         <Card>
           <div className="tnum flex items-baseline justify-between gap-3">
@@ -34,13 +111,13 @@ export function PlanBudget() {
             <div className="flex justify-between gap-3">
               <span className="text-ink/55 dark:text-cloud/55">Fixed monthly income</span>
               <span className="tnum font-semibold">
-                {currency.format(defaultBudget.fixedMonthlyIncome)}
+                {currency.format(budget.fixedMonthlyIncome)}
               </span>
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-ink/55 dark:text-cloud/55">Savings reserved first</span>
               <span className="tnum font-semibold text-emerald-700 dark:text-emerald-400">
-                −{currency.format(defaultBudget.requiredSavings)}
+                −{currency.format(budget.requiredSavings)}
               </span>
             </div>
             <div className="flex justify-between gap-3">
@@ -64,22 +141,6 @@ export function PlanBudget() {
             Everything that isn&apos;t savings, scheduled bills, or excluded comes out of this
             one pool. Category limits below are guides, not separate wallets.
           </p>
-        </Card>
-      </Section>
-
-      <Section title="Savings">
-        <Card className="flex items-center justify-between gap-3">
-          <div>
-            <p className="font-semibold">Required savings</p>
-            <p className="mt-0.5 text-xs text-ink/45 dark:text-cloud/45">
-              Plus {Math.round(defaultBudget.commissionSavingsRate * 100)}% of any commission
-              income
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="tnum font-bold">{currency.format(defaultBudget.requiredSavings)}</p>
-            <StatusPill tone="safe">Reserved</StatusPill>
-          </div>
         </Card>
       </Section>
 
@@ -175,5 +236,29 @@ export function PlanBudget() {
         )}
       </Section>
     </>
+  );
+}
+
+function BudgetField({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3">
+      <span className="text-sm text-ink/55 dark:text-cloud/55">{label}</span>
+      <input
+        type="number"
+        inputMode="decimal"
+        min="0"
+        value={value}
+        onChange={(event) => onChange(Math.max(Number(event.target.value), 0))}
+        className="tnum min-h-10 w-32 rounded-lg border border-emerald-500/40 bg-white px-3 text-right text-sm font-semibold outline-none focus:border-emerald-500 dark:border-emerald-400/40 dark:bg-white/[0.06]"
+      />
+    </label>
   );
 }

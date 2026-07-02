@@ -44,6 +44,7 @@ export function CoachChat() {
     payments,
     debts,
     goals,
+    budget,
     updateTransaction,
     addRule,
     addGoal
@@ -166,7 +167,7 @@ export function CoachChat() {
     }
 
     const reply = askCoach(question, {
-      metrics: getDashboardMetrics(transactions, payments, debts),
+      metrics: getDashboardMetrics(transactions, payments, debts, budget),
       goals,
       debts,
       girlfriendBreakdown: getGirlfriendBreakdown(transactions)

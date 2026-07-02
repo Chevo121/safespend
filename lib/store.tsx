@@ -9,6 +9,7 @@ import {
   useState
 } from "react";
 import {
+  defaultBudget,
   defaultDebts,
   defaultGoals,
   defaultLimits,
@@ -17,6 +18,7 @@ import {
   mockTransactions
 } from "./mock-data";
 import type {
+  Budget,
   Debt,
   MerchantRule,
   SavingsGoal,
@@ -30,7 +32,8 @@ const KEYS = {
   payments: "safespend.v3.payments",
   limits: "safespend.v3.limits",
   goals: "safespend.v3.goals",
-  debts: "safespend.v3.debts"
+  debts: "safespend.v3.debts",
+  budget: "safespend.v3.budget"
 };
 
 export type ImportResult = {
@@ -51,6 +54,7 @@ type Store = {
   limits: Record<string, number>;
   goals: SavingsGoal[];
   debts: Debt[];
+  budget: Budget;
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
   reopenTransaction: (id: string) => void;
   toggleGirlfriend: (id: string) => void;
@@ -65,6 +69,7 @@ type Store = {
   addDebt: (debt: Omit<Debt, "id">) => void;
   updateDebt: (id: string, patch: Partial<Debt>) => void;
   removeDebt: (id: string) => void;
+  setBudget: (patch: Partial<Budget>) => void;
   setLimit: (label: string, value: number) => void;
   importNextBatch: () => ImportResult | null;
   resetDemo: () => void;
@@ -115,6 +120,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [limits, setLimits] = useState<Record<string, number>>(defaultLimits);
   const [goals, setGoals] = useState<SavingsGoal[]>(defaultGoals);
   const [debts, setDebts] = useState<Debt[]>(defaultDebts);
+  const [budget, setBudgetState] = useState<Budget>(defaultBudget);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -162,6 +168,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setDebts(storedDebts);
     }
 
+    const storedBudget = load<Budget>(
+      KEYS.budget,
+      (value) =>
+        typeof value === "object" &&
+        value !== null &&
+        typeof (value as Budget).fixedMonthlyIncome === "number"
+    );
+    if (storedBudget) {
+      setBudgetState({ ...defaultBudget, ...storedBudget });
+    }
+
     setHydrated(true);
   }, []);
 
@@ -200,6 +217,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       save(KEYS.debts, debts);
     }
   }, [debts, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) {
+      save(KEYS.budget, budget);
+    }
+  }, [budget, hydrated]);
 
   const updateTransaction = useCallback((id: string, patch: Partial<Transaction>) => {
     setTransactions((current) =>
@@ -300,6 +323,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setDebts((current) => current.filter((debt) => debt.id !== id));
   }, []);
 
+  const setBudget = useCallback((patch: Partial<Budget>) => {
+    setBudgetState((current) => {
+      const next = { ...current, ...patch };
+      // Keep the spend cap consistent: income minus savings reserved first.
+      next.monthlySpendCap = Math.max(next.fixedMonthlyIncome - next.requiredSavings, 0);
+      return next;
+    });
+  }, []);
+
   const setLimit = useCallback((label: string, value: number) => {
     setLimits((current) => ({ ...current, [label]: Math.max(0, value) }));
   }, []);
@@ -383,6 +415,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       limits,
       goals,
       debts,
+      budget,
       updateTransaction,
       reopenTransaction,
       toggleGirlfriend,
@@ -397,6 +430,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addDebt,
       updateDebt,
       removeDebt,
+      setBudget,
       setLimit,
       importNextBatch,
       resetDemo
@@ -410,6 +444,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       limits,
       goals,
       debts,
+      budget,
       updateTransaction,
       reopenTransaction,
       toggleGirlfriend,
@@ -424,6 +459,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addDebt,
       updateDebt,
       removeDebt,
+      setBudget,
       setLimit,
       importNextBatch,
       resetDemo

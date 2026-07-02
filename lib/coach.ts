@@ -174,8 +174,8 @@ export function askCoach(text: string, ctx: CoachContext): CoachReply {
   if (/safe|today|how am i|doing|track|status|left|budget/.test(q)) {
     const projection =
       metrics.projectedRemaining >= 0
-        ? `on pace to end July with ${currency.format(metrics.projectedRemaining)} left`
-        : `on pace to end July about ${currency.format(Math.abs(metrics.projectedRemaining))} over`;
+        ? `on pace to end ${metrics.monthName} with ${currency.format(metrics.projectedRemaining)} left`
+        : `on pace to end ${metrics.monthName} about ${currency.format(Math.abs(metrics.projectedRemaining))} over`;
     return {
       body: `${statusLabel[metrics.spendStatus]}. Safe to spend today is ${currency.format(metrics.safeToSpendToday)}, with ${currency.format(metrics.discretionaryRemaining)} free after bills. You're ${projection}.${metrics.pendingClarifications > 0 ? ` ${metrics.pendingClarifications} answers pending would sharpen this.` : ""}`
     };

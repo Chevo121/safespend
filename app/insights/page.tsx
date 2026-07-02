@@ -31,8 +31,8 @@ type Insight = {
 };
 
 export default function InsightsPage() {
-  const { transactions, payments, debts } = useStore();
-  const metrics = getDashboardMetrics(transactions, payments, debts);
+  const { transactions, payments, debts, budget } = useStore();
+  const metrics = getDashboardMetrics(transactions, payments, debts, budget);
   const {
     transportSpend,
     selfTransferExcluded,
@@ -98,7 +98,7 @@ export default function InsightsPage() {
   ];
 
   return (
-    <AppShell title="Insights" subtitle="Where July's money is actually going">
+    <AppShell title="Insights" subtitle={`Where ${metrics.monthName}'s money is actually going`}>
       {metrics.pendingClarifications > 0 ? (
         <Link href="/coach" className="mb-7 block">
           <Card className="flex items-center gap-3 border-amber-500/30 bg-amber-500/[0.08] transition active:scale-[0.99] dark:bg-amber-500/10">

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Banknote, CalendarClock, Check, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { clsx } from "clsx";
 import { Card, Section } from "@/components/ui";
-import { currency, demoMonth, getCommitments } from "@/lib/calculations";
+import { currency, getCommitments, getMonthContext } from "@/lib/calculations";
 import { useStore } from "@/lib/store";
 
 const weekdays = ["M", "T", "W", "T", "F", "S", "S"];
@@ -22,22 +22,23 @@ const monthFormatter = new Intl.DateTimeFormat("en", { month: "long", year: "num
 
 export function PlanBills() {
   const { payments, debts, addPayment, updatePayment, removePayment } = useStore();
+  const current = getMonthContext();
   const [monthOffset, setMonthOffset] = useState(0);
-  const [selectedDay, setSelectedDay] = useState(2);
+  const [selectedDay, setSelectedDay] = useState(current.daysElapsed);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(paymentCategories[0]);
 
-  const viewedMonth = new Date(demoMonth.year, demoMonth.month + monthOffset, 1);
+  const viewedMonth = new Date(current.year, current.month + monthOffset, 1);
   const daysInViewedMonth = new Date(
     viewedMonth.getFullYear(),
     viewedMonth.getMonth() + 1,
     0
   ).getDate();
   const firstWeekday = (viewedMonth.getDay() + 6) % 7;
-  const isDemoMonth = monthOffset === 0;
-  const today = 2;
+  const isCurrentMonth = monthOffset === 0;
+  const today = current.daysElapsed;
 
   const commitments = getCommitments(payments, debts);
   const monthlyTotal = commitments.reduce((total, c) => total + c.amountMxn, 0);
@@ -141,7 +142,7 @@ export function PlanBills() {
           {Array.from({ length: daysInViewedMonth }, (_, index) => index + 1).map((day) => {
             const dayItems = commitments.filter((c) => c.dayOfMonth === day);
             const isSelected = day === selectedDay;
-            const isToday = isDemoMonth && day === today;
+            const isToday = isCurrentMonth && day === today;
 
             return (
               <button
