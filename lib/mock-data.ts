@@ -38,7 +38,7 @@ export const mockTransactions: Transaction[] = [
   {
     ...base,
     id: "txn-hbo-239",
-    merchant: "HBO max",
+    merchant: "HBO Max",
     rawDescription: "HBO max",
     amountMxn: -239,
     amountUsdc: toUsdc(-239),
@@ -70,13 +70,12 @@ export const mockTransactions: Transaction[] = [
     rawDescription: "To Corina Arellano",
     amountMxn: -1300,
     amountUsdc: toUsdc(-1300),
-    category: "Transfer",
+    category: "Girlfriend",
     beneficiary: "girlfriend",
     countsTowardGirlfriend: true,
     girlfriendAmountMxn: 1300,
     needsClarification: true,
-    clarificationQuestion:
-      "Was this for a gift, support, reimbursement, shared expense, date/food, transport, or other?",
+    clarificationQuestion: "What was this transfer to Corina for?",
     status: "needs_review",
     confidence: 0.65
   },
@@ -90,7 +89,7 @@ export const mockTransactions: Transaction[] = [
     category: "Transfer to self",
     beneficiary: "me",
     needsClarification: true,
-    clarificationQuestion: "Confirm this is a transfer to self and should be ignored?",
+    clarificationQuestion: "Is this a transfer between your own accounts?",
     status: "needs_review",
     confidence: 0.7
   },
@@ -110,6 +109,20 @@ export const mockTransactions: Transaction[] = [
   },
   {
     ...base,
+    id: "txn-ubereats-286",
+    merchant: "Uber Eats",
+    rawDescription: "Uber Eats",
+    amountMxn: -286.4,
+    amountUsdc: toUsdc(-286.4),
+    category: "Food delivery",
+    beneficiary: "unknown",
+    needsClarification: true,
+    clarificationQuestion: "Who was this Uber Eats order for?",
+    status: "needs_review",
+    confidence: 0.78
+  },
+  {
+    ...base,
     id: "txn-uber-16621",
     merchant: "Uber",
     rawDescription: "Uber",
@@ -124,8 +137,22 @@ export const mockTransactions: Transaction[] = [
   },
   {
     ...base,
+    id: "txn-amazon-1249",
+    merchant: "Amazon",
+    rawDescription: "AMAZON MX MKTPLACE",
+    amountMxn: -1249,
+    amountUsdc: toUsdc(-1249),
+    category: "Uncategorized",
+    beneficiary: "unknown",
+    needsClarification: true,
+    clarificationQuestion: "What was this Amazon purchase?",
+    status: "needs_review",
+    confidence: 0.58
+  },
+  {
+    ...base,
     id: "txn-mercadopago-aes-169",
-    merchant: "MERCADOPAGO *AES",
+    merchant: "MercadoPago *AES",
     rawDescription: "MERCADOPAGO *AES",
     amountMxn: -169,
     amountUsdc: toUsdc(-169),
@@ -146,21 +173,21 @@ export const mockTransactions: Transaction[] = [
     category: "Transfer to self",
     beneficiary: "me",
     needsClarification: true,
-    clarificationQuestion: "Large transfer to self. Confirm this should be ignored?",
+    clarificationQuestion: "Is this large transfer between your own accounts?",
     status: "needs_review",
     confidence: 0.6
   },
   {
     ...base,
     id: "txn-didi-prestamos-168406",
-    merchant: "To Didi Préstamos",
+    merchant: "Didi Préstamos",
     rawDescription: "To Didi Préstamos",
     amountMxn: -1684.06,
     amountUsdc: toUsdc(-1684.06),
     category: "Debt payment",
     beneficiary: "me",
     needsClarification: true,
-    clarificationQuestion: "This is a debt payment over 1,000 MXN. Confirm it?",
+    clarificationQuestion: "Confirm this is a debt payment?",
     status: "needs_review",
     confidence: 0.9
   },
@@ -174,26 +201,8 @@ export const mockTransactions: Transaction[] = [
     category: "Digital services",
     beneficiary: "unknown",
     needsClarification: true,
-    clarificationQuestion: "Was this iCloud, app, subscription, device, or other?",
+    clarificationQuestion: "What was this Apple charge?",
     status: "needs_review",
     confidence: 0.7
   }
 ];
-
-export const clarificationOptions: Record<string, string[]> = {
-  Uber: ["Me", "Girlfriend", "Shared", "Someone else"],
-  Amazon: ["Home", "Gift", "Work", "Other"],
-  "MERCADOPAGO *AES": ["Groceries", "Bill", "Gift", "Other"],
-  Apple: ["iCloud", "App", "Subscription", "Device", "Other"],
-  "To Corina Arellano": [
-    "Gift",
-    "Support",
-    "Reimbursement",
-    "Shared expense",
-    "Date/food",
-    "Transport",
-    "Other"
-  ],
-  "To Eusebio Gonzalez": ["Transfer to self", "Real spending", "Needs more review"],
-  "To Didi Préstamos": ["Debt payment", "Needs more review"]
-};

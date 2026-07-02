@@ -13,6 +13,17 @@ export type TransactionStatus =
   | "ignored"
   | "duplicate_candidate";
 
+export type GirlfriendTag =
+  | "Uber for her"
+  | "Dates"
+  | "Gifts"
+  | "Support"
+  | "Reimbursements"
+  | "Shared expenses"
+  | "Food"
+  | "Transport"
+  | "Other";
+
 export type Transaction = {
   id: string;
   merchant: string;
@@ -25,6 +36,7 @@ export type Transaction = {
   beneficiary: Beneficiary;
   countsTowardGirlfriend: boolean;
   girlfriendAmountMxn: number;
+  girlfriendTag?: GirlfriendTag;
   purchaseNote: string;
   needsClarification: boolean;
   clarificationQuestion: string;

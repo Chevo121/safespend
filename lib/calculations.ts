@@ -16,16 +16,28 @@ export const preciseCurrency = new Intl.NumberFormat("es-MX", {
 export const formatDate = (date: string) =>
   new Intl.DateTimeFormat("en", {
     day: "2-digit",
-    month: "short",
-    year: "numeric"
+    month: "short"
   }).format(new Date(`${date}T12:00:00`));
+
+// Phase 1 runs against a fixed mocked month: July 2026, viewed on day 2.
+const daysInMonth = 31;
+const daysElapsed = 2;
+const daysLeft = daysInMonth - daysElapsed + 1;
+
+export type SpendStatus = "safe" | "tight" | "over";
+
+export const statusLabel: Record<SpendStatus, string> = {
+  safe: "On track",
+  tight: "Getting tight",
+  over: "Over pace"
+};
 
 export function isSpending(transaction: Transaction) {
   if (transaction.status === "ignored") {
     return false;
   }
 
-  if (transaction.merchant === "To Eusebio Gonzalez") {
+  if (transaction.category === "Transfer to self") {
     return false;
   }
 
@@ -33,36 +45,222 @@ export function isSpending(transaction: Transaction) {
 }
 
 export function getDashboardMetrics(transactions = mockTransactions) {
-  const actualSpend = transactions
-    .filter(isSpending)
-    .reduce((total, transaction) => total + Math.abs(transaction.amountMxn), 0);
+  const spending = transactions.filter(isSpending);
+  const actualSpend = spending.reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 
-  const actualSaved = defaultBudget.requiredSavings;
-  const flexiblePoolRemaining = defaultBudget.monthlySpendCap - actualSpend;
-  const daysLeftInMonth = 30;
-  const safeToSpendToday = flexiblePoolRemaining / daysLeftInMonth;
+  const remainingBudget = defaultBudget.monthlySpendCap - actualSpend;
+  const safeToSpendToday = remainingBudget / daysLeft;
+  const dailyBaseline = defaultBudget.monthlySpendCap / daysInMonth;
+
+  const ratio = dailyBaseline > 0 ? safeToSpendToday / dailyBaseline : 0;
+  const spendStatus: SpendStatus =
+    remainingBudget <= 0 || ratio < 0.65 ? "over" : ratio < 1 ? "tight" : "safe";
+
+  // Blend observed pace with the daily budget so early-month days don't swing wildly.
+  const observedPace = actualSpend / daysElapsed;
+  const blendedPace =
+    (observedPace * daysElapsed + dailyBaseline * (daysInMonth - daysElapsed)) / daysInMonth;
+  const projectedSpend = actualSpend + blendedPace * (daysInMonth - daysElapsed);
+  const projectedRemaining = defaultBudget.monthlySpendCap - projectedSpend;
+  const projectionStatus: SpendStatus =
+    projectedRemaining < 0
+      ? "over"
+      : projectedRemaining < defaultBudget.monthlySpendCap * 0.1
+        ? "tight"
+        : "safe";
+
   const girlfriendSpend = transactions.reduce(
-    (total, transaction) => total + transaction.girlfriendAmountMxn,
+    (total, tx) => total + (tx.status === "ignored" ? 0 : tx.girlfriendAmountMxn),
     0
   );
+
   const pendingClarifications = transactions.filter(
-    (transaction) => transaction.needsClarification || transaction.status === "needs_review"
+    (tx) => tx.status === "needs_review"
   ).length;
-  const weekendUberSpend = transactions
-    .filter((transaction) => transaction.merchant === "Uber")
-    .reduce((total, transaction) => total + Math.abs(transaction.amountMxn), 0);
 
   return {
     incomeThisMonth: defaultBudget.fixedMonthlyIncome,
     requiredSavings: defaultBudget.requiredSavings,
-    actualSaved,
+    actualSaved: defaultBudget.requiredSavings,
     monthlySpendCap: defaultBudget.monthlySpendCap,
     actualSpend,
-    flexiblePoolRemaining,
+    remainingBudget,
     safeToSpendToday,
-    daysLeftInMonth,
+    dailyBaseline,
+    spendStatus,
+    projectedSpend,
+    projectedRemaining,
+    projectionStatus,
+    daysInMonth,
+    daysElapsed,
+    daysLeft,
     girlfriendSpend,
-    pendingClarifications,
-    uberEatsWeekendQuota: Math.max(0, 900 - weekendUberSpend)
+    pendingClarifications
   };
+}
+
+export function getGirlfriendBreakdown(transactions = mockTransactions) {
+  const breakdown = new Map<string, number>();
+
+  for (const tx of transactions) {
+    if (tx.status === "ignored" || tx.girlfriendAmountMxn <= 0) {
+      continue;
+    }
+
+    const tag = tx.girlfriendTag ?? "Untagged";
+    breakdown.set(tag, (breakdown.get(tag) ?? 0) + tx.girlfriendAmountMxn);
+  }
+
+  return [...breakdown.entries()]
+    .map(([tag, amount]) => ({ tag, amount }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
+export type BudgetRow = {
+  label: string;
+  spent: number;
+  limit: number;
+  detail: string;
+};
+
+export type BudgetGroup = {
+  name: string;
+  description: string;
+  rows: BudgetRow[];
+};
+
+const flexibleCategories = [
+  "Uncategorized",
+  "Shopping",
+  "Clothes shopping",
+  "Electronics",
+  "Home",
+  "Pet",
+  "Health",
+  "Gifts",
+  "Food & drinks",
+  "Services",
+  "Transfers"
+];
+
+function totalByMerchant(transactions: Transaction[], merchant: string) {
+  return transactions
+    .filter((tx) => tx.merchant === merchant && isSpending(tx))
+    .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
+}
+
+function totalByCategories(transactions: Transaction[], categories: string[]) {
+  return transactions
+    .filter((tx) => categories.includes(tx.category) && isSpending(tx))
+    .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
+}
+
+export function getBudgetGroups(transactions = mockTransactions): BudgetGroup[] {
+  const girlfriendSpend = transactions.reduce(
+    (total, tx) => total + (tx.status === "ignored" ? 0 : tx.girlfriendAmountMxn),
+    0
+  );
+
+  return [
+    {
+      name: "Fixed essentials",
+      description: "Recurring charges that stay roughly the same each month.",
+      rows: [
+        {
+          label: "Subscriptions",
+          spent: totalByCategories(transactions, ["Subscriptions"]),
+          limit: 1000,
+          detail: "HBO Max and similar recurring spend"
+        },
+        {
+          label: "Digital services",
+          spent: totalByCategories(transactions, ["Digital services", "Devices"]),
+          limit: 750,
+          detail: "Apple, iCloud, apps"
+        }
+      ]
+    },
+    {
+      name: "Flexible spending",
+      description: "Day-to-day spend that comes out of the flexible pool.",
+      rows: [
+        {
+          label: "Uber rides",
+          spent: totalByMerchant(transactions, "Uber"),
+          limit: 1500,
+          detail: "All rides, before splitting beneficiaries"
+        },
+        {
+          label: "Uber Eats",
+          spent: totalByMerchant(transactions, "Uber Eats"),
+          limit: 900,
+          detail: "Tracked separately from rides"
+        },
+        {
+          label: "Shopping & marketplaces",
+          spent: totalByCategories(transactions, flexibleCategories),
+          limit: 4000,
+          detail: "Amazon, MercadoPago, and clarified purchases"
+        }
+      ]
+    },
+    {
+      name: "Girlfriend",
+      description: "Everything tagged toward girlfriend spend, across categories.",
+      rows: [
+        {
+          label: "Girlfriend spend",
+          spent: girlfriendSpend,
+          limit: 5000,
+          detail: "Transfers, rides, gifts, and shared expenses"
+        }
+      ]
+    },
+    {
+      name: "Debt & transfers",
+      description: "Payments that reduce debt, plus moves between your own accounts.",
+      rows: [
+        {
+          label: "Debt payments",
+          spent: totalByCategories(transactions, ["Debt payment"]),
+          limit: 3000,
+          detail: "Didi Préstamos"
+        }
+      ]
+    }
+  ];
+}
+
+export function getInsights(transactions = mockTransactions) {
+  const spending = transactions.filter(isSpending);
+
+  const transportSpend = transactions
+    .filter((tx) => (tx.merchant === "Uber" || tx.merchant === "Uber Eats") && isSpending(tx))
+    .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
+
+  const selfTransferExcluded = transactions
+    .filter((tx) => tx.category === "Transfer to self" && tx.amountMxn < 0)
+    .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
+
+  const debtPayments = totalByCategories(transactions, ["Debt payment"]);
+
+  const largestTransaction = spending.reduce<Transaction | null>(
+    (largest, tx) =>
+      !largest || Math.abs(tx.amountMxn) > Math.abs(largest.amountMxn) ? tx : largest,
+    null
+  );
+
+  return { transportSpend, selfTransferExcluded, debtPayments, largestTransaction };
+}
+
+export function getProgressTone(percent: number): SpendStatus {
+  if (percent >= 1) {
+    return "over";
+  }
+
+  if (percent >= 0.75) {
+    return "tight";
+  }
+
+  return "safe";
 }

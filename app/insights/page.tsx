@@ -1,64 +1,123 @@
-import { AlertTriangle, Heart, ReceiptText, Route } from "lucide-react";
+"use client";
+
+import Link from "next/link";
+import {
+  ArrowLeftRight,
+  Banknote,
+  Car,
+  ChevronRight,
+  Heart,
+  MessagesSquare,
+  Receipt,
+  type LucideIcon
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { Section, StatusPill } from "@/components/ui";
-import { currency, getDashboardMetrics } from "@/lib/calculations";
+import { Card, Section, StatusPill, type Tone } from "@/components/ui";
+import {
+  currency,
+  getDashboardMetrics,
+  getInsights,
+  preciseCurrency
+} from "@/lib/calculations";
+import { useStore } from "@/lib/store";
+
+type Insight = {
+  icon: LucideIcon;
+  tone: Tone;
+  title: string;
+  value: string;
+  body: string;
+};
 
 export default function InsightsPage() {
-  const metrics = getDashboardMetrics();
-  const insights = [
-    {
-      icon: AlertTriangle,
-      title: "Largest uncertainty",
-      body: "Transfers to self are excluded from spend for now, but they stay in review until confirmed.",
-      tone: "warn" as const
-    },
-    {
-      icon: Route,
-      title: "Uber cluster",
-      body: "Four Uber rides need beneficiary answers before SafeSpend can split personal vs girlfriend spend.",
-      tone: "neutral" as const
-    },
+  const { transactions } = useStore();
+  const metrics = getDashboardMetrics(transactions);
+  const { transportSpend, selfTransferExcluded, debtPayments, largestTransaction } =
+    getInsights(transactions);
+
+  const insights: Insight[] = [
     {
       icon: Heart,
+      tone: "love",
       title: "Girlfriend spend",
-      body: `${currency.format(metrics.girlfriendSpend)} is currently attributed to Corina from mocked transfer data.`,
-      tone: "hot" as const
+      value: currency.format(metrics.girlfriendSpend),
+      body: "Everything tagged toward Corina this month — transfers, rides, and shared expenses."
     },
     {
-      icon: ReceiptText,
-      title: "Debt visibility",
-      body: "Didi Préstamos is categorized as debt payment and flagged because it is over 1,000 MXN.",
-      tone: "good" as const
-    }
+      icon: Car,
+      tone: "info",
+      title: "Transport & delivery",
+      value: currency.format(transportSpend),
+      body: "Uber rides plus Uber Eats. Beneficiary answers split this between you and girlfriend spend."
+    },
+    {
+      icon: ArrowLeftRight,
+      tone: "neutral",
+      title: "Excluded transfers to self",
+      value: currency.format(selfTransferExcluded),
+      body: "Moves between your own accounts. They never count against the flexible pool."
+    },
+    {
+      icon: Banknote,
+      tone: "safe",
+      title: "Debt payment",
+      value: currency.format(debtPayments),
+      body: "Didi Préstamos this month. Debt payments are tracked apart from day-to-day spend."
+    },
+    ...(largestTransaction
+      ? [
+          {
+            icon: Receipt,
+            tone: "tight" as Tone,
+            title: "Largest transaction",
+            value: preciseCurrency.format(Math.abs(largestTransaction.amountMxn)),
+            body: `${largestTransaction.merchant} — the biggest single counted expense so far.`
+          }
+        ]
+      : [])
   ];
 
   return (
-    <AppShell title="Insights" activePath="/insights">
-      <Section title="Mock insights">
+    <AppShell title="Insights" subtitle="Where July's money is actually going">
+      {metrics.pendingClarifications > 0 ? (
+        <Link href="/review" className="mb-7 block">
+          <Card className="flex items-center gap-3 border-amber-500/30 bg-amber-500/[0.08] transition active:scale-[0.99] dark:bg-amber-500/10">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400">
+              <MessagesSquare className="size-5" aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">
+                {metrics.pendingClarifications} answers pending
+              </span>
+              <span className="mt-0.5 block text-sm text-ink/55 dark:text-cloud/55">
+                These numbers get sharper once everything is clarified.
+              </span>
+            </span>
+            <ChevronRight className="size-5 shrink-0 text-ink/35 dark:text-cloud/35" aria-hidden="true" />
+          </Card>
+        </Link>
+      ) : null}
+
+      <Section title="This month">
         <div className="space-y-3">
           {insights.map((insight) => {
             const Icon = insight.icon;
 
             return (
-              <article
-                key={insight.title}
-                className="rounded-lg border border-black/8 bg-white/74 p-4 dark:border-white/10 dark:bg-white/5"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-mint/34 text-moss dark:bg-mint/14 dark:text-mint">
-                    <Icon className="size-5" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="font-semibold">{insight.title}</h2>
-                      <StatusPill tone={insight.tone}>{insight.tone}</StatusPill>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-ink/62 dark:text-cloud/66">
-                      {insight.body}
-                    </p>
+              <Card key={insight.title} className="flex items-start gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-black/[0.05] dark:bg-white/[0.08]">
+                  <Icon className="size-5 text-ink/60 dark:text-cloud/60" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="font-semibold">{insight.title}</h3>
+                    <StatusPill tone={insight.tone}>{insight.value}</StatusPill>
                   </div>
+                  <p className="mt-1.5 text-sm leading-6 text-ink/55 dark:text-cloud/55">
+                    {insight.body}
+                  </p>
                 </div>
-              </article>
+              </Card>
             );
           })}
         </div>
