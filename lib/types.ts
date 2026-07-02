@@ -51,3 +51,17 @@ export type Budget = {
   monthlySpendCap: number;
   commissionSavingsRate: number;
 };
+
+export type ScheduledPayment = {
+  id: string;
+  name: string;
+  amountMxn: number;
+  dayOfMonth: number;
+  category: string;
+};
+
+export type MerchantRule = {
+  merchant: string;
+  category: string;
+  label: string;
+};

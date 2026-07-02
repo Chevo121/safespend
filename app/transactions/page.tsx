@@ -19,7 +19,15 @@ const filters = [
 type FilterKey = (typeof filters)[number]["key"];
 
 function matches(tx: Transaction, filter: FilterKey) {
-  return filter === "all" || tx.status === filter;
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "needs_review") {
+    return tx.status === "needs_review" || tx.status === "duplicate_candidate";
+  }
+
+  return tx.status === filter;
 }
 
 export default function TransactionsPage() {
@@ -68,7 +76,7 @@ export default function TransactionsPage() {
         {visible.length > 0 ? (
           <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
             {visible.map((tx) => (
-              <TransactionRow key={tx.id} transaction={tx} />
+              <TransactionRow key={tx.id} transaction={tx} interactive />
             ))}
           </Card>
         ) : (
@@ -76,6 +84,9 @@ export default function TransactionsPage() {
             Nothing here for this filter.
           </Card>
         )}
+        <p className="mt-2 px-1 text-xs leading-5 text-ink/40 dark:text-cloud/40">
+          Tap a transaction to change its answer or toggle girlfriend spend.
+        </p>
       </Section>
     </AppShell>
   );

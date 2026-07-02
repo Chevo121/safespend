@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   ArrowLeftRight,
   Banknote,
+  CalendarClock,
   Car,
   ChevronRight,
   Heart,
@@ -30,8 +31,8 @@ type Insight = {
 };
 
 export default function InsightsPage() {
-  const { transactions } = useStore();
-  const metrics = getDashboardMetrics(transactions);
+  const { transactions, payments } = useStore();
+  const metrics = getDashboardMetrics(transactions, payments);
   const { transportSpend, selfTransferExcluded, debtPayments, largestTransaction } =
     getInsights(transactions);
 
@@ -41,7 +42,14 @@ export default function InsightsPage() {
       tone: "love",
       title: "Girlfriend spend",
       value: currency.format(metrics.girlfriendSpend),
-      body: "Everything tagged toward Corina this month — transfers, rides, and shared expenses."
+      body: "Everything tagged toward your girlfriend this month — transfers, rides, dates, and shared expenses."
+    },
+    {
+      icon: CalendarClock,
+      tone: "info",
+      title: "Bills still coming",
+      value: currency.format(metrics.committedRemaining),
+      body: "Scheduled payments due later this month. Already reserved out of your safe-to-spend."
     },
     {
       icon: Car,

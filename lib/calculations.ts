@@ -1,5 +1,5 @@
-import { defaultBudget, mockTransactions } from "./mock-data";
-import type { Transaction } from "./types";
+import { defaultBudget, defaultLimits } from "./mock-data";
+import type { ScheduledPayment, Transaction } from "./types";
 
 export const currency = new Intl.NumberFormat("es-MX", {
   style: "currency",
@@ -20,6 +20,7 @@ export const formatDate = (date: string) =>
   }).format(new Date(`${date}T12:00:00`));
 
 // Phase 1 runs against a fixed mocked month: July 2026, viewed on day 2.
+export const demoMonth = { year: 2026, month: 6, label: "July 2026" };
 const daysInMonth = 31;
 const daysElapsed = 2;
 const daysLeft = daysInMonth - daysElapsed + 1;
@@ -33,7 +34,7 @@ export const statusLabel: Record<SpendStatus, string> = {
 };
 
 export function isSpending(transaction: Transaction) {
-  if (transaction.status === "ignored") {
+  if (transaction.status === "ignored" || transaction.status === "duplicate_candidate") {
     return false;
   }
 
@@ -44,23 +45,35 @@ export function isSpending(transaction: Transaction) {
   return transaction.amountMxn < 0;
 }
 
-export function getDashboardMetrics(transactions = mockTransactions) {
+export function getDashboardMetrics(
+  transactions: Transaction[],
+  payments: ScheduledPayment[] = []
+) {
   const spending = transactions.filter(isSpending);
   const actualSpend = spending.reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 
+  // Scheduled bills still due this month get reserved before anything is "safe".
+  const committedTotal = payments.reduce((total, p) => total + p.amountMxn, 0);
+  const upcomingPayments = payments
+    .filter((p) => p.dayOfMonth >= daysElapsed)
+    .sort((a, b) => a.dayOfMonth - b.dayOfMonth);
+  const committedRemaining = upcomingPayments.reduce((total, p) => total + p.amountMxn, 0);
+
   const remainingBudget = defaultBudget.monthlySpendCap - actualSpend;
-  const safeToSpendToday = remainingBudget / daysLeft;
-  const dailyBaseline = defaultBudget.monthlySpendCap / daysInMonth;
+  const discretionaryRemaining = remainingBudget - committedRemaining;
+  const safeToSpendToday = discretionaryRemaining / daysLeft;
+  const dailyBaseline = (defaultBudget.monthlySpendCap - committedTotal) / daysInMonth;
 
   const ratio = dailyBaseline > 0 ? safeToSpendToday / dailyBaseline : 0;
   const spendStatus: SpendStatus =
-    remainingBudget <= 0 || ratio < 0.65 ? "over" : ratio < 1 ? "tight" : "safe";
+    discretionaryRemaining <= 0 || ratio < 0.65 ? "over" : ratio < 1 ? "tight" : "safe";
 
   // Blend observed pace with the daily budget so early-month days don't swing wildly.
   const observedPace = actualSpend / daysElapsed;
   const blendedPace =
     (observedPace * daysElapsed + dailyBaseline * (daysInMonth - daysElapsed)) / daysInMonth;
-  const projectedSpend = actualSpend + blendedPace * (daysInMonth - daysElapsed);
+  const projectedSpend =
+    actualSpend + committedRemaining + blendedPace * (daysInMonth - daysElapsed);
   const projectedRemaining = defaultBudget.monthlySpendCap - projectedSpend;
   const projectionStatus: SpendStatus =
     projectedRemaining < 0
@@ -70,12 +83,16 @@ export function getDashboardMetrics(transactions = mockTransactions) {
         : "safe";
 
   const girlfriendSpend = transactions.reduce(
-    (total, tx) => total + (tx.status === "ignored" ? 0 : tx.girlfriendAmountMxn),
+    (total, tx) =>
+      total +
+      (tx.status === "ignored" || tx.status === "duplicate_candidate"
+        ? 0
+        : tx.girlfriendAmountMxn),
     0
   );
 
   const pendingClarifications = transactions.filter(
-    (tx) => tx.status === "needs_review"
+    (tx) => tx.status === "needs_review" || tx.status === "duplicate_candidate"
   ).length;
 
   return {
@@ -85,6 +102,10 @@ export function getDashboardMetrics(transactions = mockTransactions) {
     monthlySpendCap: defaultBudget.monthlySpendCap,
     actualSpend,
     remainingBudget,
+    committedTotal,
+    committedRemaining,
+    upcomingPayments,
+    discretionaryRemaining,
     safeToSpendToday,
     dailyBaseline,
     spendStatus,
@@ -99,11 +120,15 @@ export function getDashboardMetrics(transactions = mockTransactions) {
   };
 }
 
-export function getGirlfriendBreakdown(transactions = mockTransactions) {
+export function getGirlfriendBreakdown(transactions: Transaction[]) {
   const breakdown = new Map<string, number>();
 
   for (const tx of transactions) {
-    if (tx.status === "ignored" || tx.girlfriendAmountMxn <= 0) {
+    if (
+      tx.status === "ignored" ||
+      tx.status === "duplicate_candidate" ||
+      tx.girlfriendAmountMxn <= 0
+    ) {
       continue;
     }
 
@@ -155,11 +180,20 @@ function totalByCategories(transactions: Transaction[], categories: string[]) {
     .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 }
 
-export function getBudgetGroups(transactions = mockTransactions): BudgetGroup[] {
+export function getBudgetGroups(
+  transactions: Transaction[],
+  limits: Record<string, number> = defaultLimits
+): BudgetGroup[] {
   const girlfriendSpend = transactions.reduce(
-    (total, tx) => total + (tx.status === "ignored" ? 0 : tx.girlfriendAmountMxn),
+    (total, tx) =>
+      total +
+      (tx.status === "ignored" || tx.status === "duplicate_candidate"
+        ? 0
+        : tx.girlfriendAmountMxn),
     0
   );
+
+  const limit = (label: string) => limits[label] ?? defaultLimits[label] ?? 0;
 
   return [
     {
@@ -169,13 +203,13 @@ export function getBudgetGroups(transactions = mockTransactions): BudgetGroup[] 
         {
           label: "Subscriptions",
           spent: totalByCategories(transactions, ["Subscriptions"]),
-          limit: 1000,
+          limit: limit("Subscriptions"),
           detail: "HBO Max and similar recurring spend"
         },
         {
           label: "Digital services",
           spent: totalByCategories(transactions, ["Digital services", "Devices"]),
-          limit: 750,
+          limit: limit("Digital services"),
           detail: "Apple, iCloud, apps"
         }
       ]
@@ -187,19 +221,19 @@ export function getBudgetGroups(transactions = mockTransactions): BudgetGroup[] 
         {
           label: "Uber rides",
           spent: totalByMerchant(transactions, "Uber"),
-          limit: 1500,
+          limit: limit("Uber rides"),
           detail: "All rides, before splitting beneficiaries"
         },
         {
           label: "Uber Eats",
           spent: totalByMerchant(transactions, "Uber Eats"),
-          limit: 900,
+          limit: limit("Uber Eats"),
           detail: "Tracked separately from rides"
         },
         {
           label: "Shopping & marketplaces",
           spent: totalByCategories(transactions, flexibleCategories),
-          limit: 4000,
+          limit: limit("Shopping & marketplaces"),
           detail: "Amazon, MercadoPago, and clarified purchases"
         }
       ]
@@ -211,7 +245,7 @@ export function getBudgetGroups(transactions = mockTransactions): BudgetGroup[] 
         {
           label: "Girlfriend spend",
           spent: girlfriendSpend,
-          limit: 5000,
+          limit: limit("Girlfriend spend"),
           detail: "Transfers, rides, gifts, and shared expenses"
         }
       ]
@@ -223,7 +257,7 @@ export function getBudgetGroups(transactions = mockTransactions): BudgetGroup[] 
         {
           label: "Debt payments",
           spent: totalByCategories(transactions, ["Debt payment"]),
-          limit: 3000,
+          limit: limit("Debt payments"),
           detail: "Didi Préstamos"
         }
       ]
@@ -231,7 +265,7 @@ export function getBudgetGroups(transactions = mockTransactions): BudgetGroup[] 
   ];
 }
 
-export function getInsights(transactions = mockTransactions) {
+export function getInsights(transactions: Transaction[]) {
   const spending = transactions.filter(isSpending);
 
   const transportSpend = transactions

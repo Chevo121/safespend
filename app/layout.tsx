@@ -4,12 +4,21 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SafeSpend",
-  description: "Mobile-first spending review from screenshots."
+  description: "Mobile-first spending review from screenshots.",
+  appleWebApp: {
+    capable: true,
+    title: "SafeSpend",
+    statusBarStyle: "black-translucent"
+  },
+  icons: {
+    apple: "/apple-touch-icon.png"
+  }
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f5f5f8" },
     { media: "(prefers-color-scheme: dark)", color: "#0a0b0e" }

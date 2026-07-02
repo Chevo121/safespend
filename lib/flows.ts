@@ -4,12 +4,16 @@ export type FlowOption = {
   label: string;
   reply: string;
   next?: string;
+  ruleCategory?: string;
   patch: (tx: Transaction) => Partial<Transaction>;
 };
 
 export type FlowStep = {
   question: string;
   options: FlowOption[];
+  // Category-style questions can be remembered as a merchant rule and
+  // accept a free-text answer that gets mapped to a category.
+  canRemember?: boolean;
 };
 
 const girlfriendFull = (tx: Transaction, tag: GirlfriendTag): Partial<Transaction> => ({
@@ -56,6 +60,25 @@ function girlfriendCountStep(): FlowStep {
         label: "No",
         reply: "Noted — it won't count toward girlfriend spend.",
         patch: () => girlfriendNone
+      }
+    ]
+  };
+}
+
+function duplicateStep(): FlowStep {
+  return {
+    question:
+      "This looks identical to another charge — same merchant, amount, and date. Keep it?",
+    options: [
+      {
+        label: "It's a duplicate",
+        reply: "Removed — it won't count twice.",
+        patch: () => ({ status: "ignored", purchaseNote: "Duplicate" })
+      },
+      {
+        label: "Keep both",
+        reply: "Kept as a separate charge — let me file it.",
+        patch: () => ({ status: "needs_review" })
       }
     ]
   };
@@ -119,7 +142,8 @@ function categoryOption(label: string, category: string): FlowOption {
   return {
     label,
     reply: `Categorized as ${category}.`,
-    patch: () => ({ category, beneficiary: "me" })
+    ruleCategory: category,
+    patch: () => ({ category, beneficiary: "me", ...girlfriendNone })
   };
 }
 
@@ -130,7 +154,14 @@ const girlfriendPurchaseOption: FlowOption = {
   patch: (tx) => ({ ...girlfriendFull(tx, "Gifts"), category: "Girlfriend" })
 };
 
-const corinaTags: Array<{ label: string; tag: GirlfriendTag }> = [
+const dateNightOption: FlowOption = {
+  label: "Date night",
+  reply: "Tagged as a date.",
+  next: "girlfriend-count",
+  patch: (tx) => ({ ...girlfriendFull(tx, "Dates"), category: "Food & drinks" })
+};
+
+const girlfriendTransferTags: Array<{ label: string; tag: GirlfriendTag }> = [
   { label: "Gift", tag: "Gifts" },
   { label: "Support", tag: "Support" },
   { label: "Reimbursement", tag: "Reimbursements" },
@@ -141,6 +172,10 @@ const corinaTags: Array<{ label: string; tag: GirlfriendTag }> = [
 ];
 
 export function getFlowStep(tx: Transaction, stepId = "start"): FlowStep {
+  if (tx.status === "duplicate_candidate") {
+    return duplicateStep();
+  }
+
   if (stepId === "girlfriend-count") {
     return girlfriendCountStep();
   }
@@ -158,6 +193,7 @@ export function getFlowStep(tx: Transaction, stepId = "start"): FlowStep {
   if (merchant.includes("amazon")) {
     return {
       question: "What was this Amazon purchase?",
+      canRemember: true,
       options: [
         ...amazonCategories.map(({ label, category }) => categoryOption(label, category)),
         girlfriendPurchaseOption,
@@ -169,6 +205,7 @@ export function getFlowStep(tx: Transaction, stepId = "start"): FlowStep {
   if (merchant.includes("mercadopago")) {
     return {
       question: "What was this MercadoPago payment for?",
+      canRemember: true,
       options: [
         ...mercadoPagoCategories.map(({ label, category }) => categoryOption(label, category)),
         girlfriendPurchaseOption,
@@ -180,14 +217,15 @@ export function getFlowStep(tx: Transaction, stepId = "start"): FlowStep {
   if (merchant.includes("apple")) {
     return {
       question: "What was this Apple charge?",
+      canRemember: true,
       options: appleCategories.map(({ label, category }) => categoryOption(label, category))
     };
   }
 
-  if (merchant.includes("corina")) {
+  if (merchant.includes("girlfriend")) {
     return {
-      question: "What was this transfer to Corina for?",
-      options: corinaTags.map(({ label, tag }) => ({
+      question: "What was this transfer to your girlfriend for?",
+      options: girlfriendTransferTags.map(({ label, tag }) => ({
         label,
         reply: `Tagged as ${label.toLowerCase()}.`,
         next: "girlfriend-count",
@@ -200,7 +238,7 @@ export function getFlowStep(tx: Transaction, stepId = "start"): FlowStep {
     };
   }
 
-  if (merchant.includes("eusebio")) {
+  if (merchant.includes("myself")) {
     return {
       question:
         Math.abs(tx.amountMxn) >= 5000
@@ -241,12 +279,15 @@ export function getFlowStep(tx: Transaction, stepId = "start"): FlowStep {
 
   return {
     question: tx.clarificationQuestion || "How should this be recorded?",
+    canRemember: true,
     options: [
       {
-        label: "Approve",
+        label: "Just me",
         reply: "Approved.",
-        patch: () => ({})
+        patch: () => ({ beneficiary: "me", ...girlfriendNone })
       },
+      dateNightOption,
+      girlfriendPurchaseOption,
       {
         label: "Ignore",
         reply: "Ignored — it won't affect your totals.",
@@ -254,4 +295,27 @@ export function getFlowStep(tx: Transaction, stepId = "start"): FlowStep {
       }
     ]
   };
+}
+
+const categoryKeywords: Array<{ pattern: RegExp; category: string }> = [
+  { pattern: /\b(dog|cat|pet|perro|gato|vet)\b/i, category: "Pet" },
+  { pattern: /\b(grocer|super|market|despensa|oxxo)\b/i, category: "Food & drinks" },
+  { pattern: /\b(food|dinner|lunch|breakfast|taco|coffee|cafe|restaurant|comida)\b/i, category: "Food & drinks" },
+  { pattern: /\b(clothes|shirt|shoe|pants|dress|ropa|sneaker)\b/i, category: "Clothes shopping" },
+  { pattern: /\b(gift|regalo|present)\b/i, category: "Gifts" },
+  { pattern: /\b(tech|phone|cable|charger|laptop|headphone|electronic)\b/i, category: "Electronics" },
+  { pattern: /\b(home|furniture|kitchen|casa|cleaning)\b/i, category: "Home" },
+  { pattern: /\b(supplement|vitamin|pharmacy|medicine|gym|health|protein)\b/i, category: "Health" },
+  { pattern: /\b(subscription|suscripci[oó]n)\b/i, category: "Subscriptions" },
+  { pattern: /\b(uber|taxi|ride|transport)\b/i, category: "Transport" }
+];
+
+export function guessCategory(text: string): string {
+  for (const { pattern, category } of categoryKeywords) {
+    if (pattern.test(text)) {
+      return category;
+    }
+  }
+
+  return "Shopping";
 }

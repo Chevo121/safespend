@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Heart, MessagesSquare, PiggyBank } from "lucide-react";
+import { CalendarClock, ChevronRight, Heart, MessagesSquare, PiggyBank } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TransactionRow } from "@/components/transaction-row";
 import { Card, ProgressBar, Section, StatusPill } from "@/components/ui";
@@ -28,11 +28,11 @@ const heroPill: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { transactions } = useStore();
-  const metrics = getDashboardMetrics(transactions);
+  const { transactions, payments, limits } = useStore();
+  const metrics = getDashboardMetrics(transactions, payments);
   const girlfriendBreakdown = getGirlfriendBreakdown(transactions);
 
-  const categoryRows = getBudgetGroups(transactions)
+  const categoryRows = getBudgetGroups(transactions, limits)
     .filter((group) => group.name !== "Girlfriend")
     .flatMap((group) => group.rows)
     .filter((row) => row.spent > 0)
@@ -40,14 +40,13 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   const recent = transactions.slice(0, 4);
-  const girlfriendLimit = 5000;
+  const girlfriendLimit = limits["Girlfriend spend"] ?? 5000;
+  const nextPayments = metrics.upcomingPayments.slice(0, 3);
 
   return (
     <AppShell title="Today" subtitle={`July 2026 · Day ${metrics.daysElapsed} of ${metrics.daysInMonth}`}>
       {/* Hero: safe to spend today */}
-      <div
-        className={`relative mb-4 overflow-hidden rounded-3xl bg-ink p-6 text-white shadow-soft dark:bg-white/[0.07] dark:shadow-none`}
-      >
+      <div className="relative mb-4 overflow-hidden rounded-3xl bg-ink p-6 text-white shadow-soft dark:bg-white/[0.07] dark:shadow-none">
         <div
           className={`pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b to-transparent ${heroAccent[metrics.spendStatus]}`}
         />
@@ -64,7 +63,9 @@ export default function DashboardPage() {
             {currency.format(metrics.safeToSpendToday)}
           </p>
           <p className="mt-2 text-sm text-white/55">
-            {currency.format(metrics.remainingBudget)} left ÷ {metrics.daysLeft} days remaining
+            {currency.format(metrics.discretionaryRemaining)} free after{" "}
+            {currency.format(metrics.committedRemaining)} reserved for bills ÷{" "}
+            {metrics.daysLeft} days
           </p>
 
           <div className="mt-5 grid grid-cols-2 gap-4 border-t border-white/10 pt-4">
@@ -95,7 +96,7 @@ export default function DashboardPage() {
                   : `${currency.format(Math.abs(metrics.projectedRemaining))} over`}
               </p>
               <p className="mt-2 text-[11px] leading-4 text-white/45">
-                At your current pace
+                Pace + upcoming bills
               </p>
             </div>
           </div>
@@ -104,7 +105,7 @@ export default function DashboardPage() {
 
       {/* Pending clarifications action card */}
       {metrics.pendingClarifications > 0 ? (
-        <Link href="/review" className="mb-7 block">
+        <Link href="/review" className="mb-4 block">
           <Card className="flex items-center gap-3 border-amber-500/30 bg-amber-500/[0.08] transition active:scale-[0.99] dark:bg-amber-500/10">
             <span className="grid size-10 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400">
               <MessagesSquare className="size-5" aria-hidden="true" />
@@ -118,6 +119,39 @@ export default function DashboardPage() {
               </span>
             </span>
             <ChevronRight className="size-5 shrink-0 text-ink/35 dark:text-cloud/35" aria-hidden="true" />
+          </Card>
+        </Link>
+      ) : null}
+
+      {/* Upcoming scheduled payments */}
+      {nextPayments.length > 0 ? (
+        <Link href="/calendar" className="mb-7 block">
+          <Card className="transition active:scale-[0.99]">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sky-500/12 text-sky-600 dark:text-sky-400">
+                <CalendarClock className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">Upcoming bills</p>
+                <p className="mt-0.5 text-xs text-ink/45 dark:text-cloud/45">
+                  {currency.format(metrics.committedRemaining)} reserved this month
+                </p>
+              </div>
+              <ChevronRight className="size-5 shrink-0 text-ink/35 dark:text-cloud/35" aria-hidden="true" />
+            </div>
+            <div className="mt-3 space-y-2 border-t border-black/[0.05] pt-3 dark:border-white/[0.06]">
+              {nextPayments.map((payment) => (
+                <div key={payment.id} className="flex items-center gap-3 text-sm">
+                  <span className="tnum grid w-9 shrink-0 place-items-center rounded-lg bg-black/[0.05] py-1 text-xs font-bold text-ink/60 dark:bg-white/[0.08] dark:text-cloud/60">
+                    {payment.dayOfMonth}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{payment.name}</span>
+                  <span className="tnum shrink-0 font-semibold">
+                    {currency.format(payment.amountMxn)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </Card>
         </Link>
       ) : null}
