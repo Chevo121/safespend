@@ -158,7 +158,7 @@ export function TransactionRow({
             <button
               onClick={() => {
                 reopenTransaction(transaction.id);
-                router.push("/review");
+                router.push("/coach");
               }}
               className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-black/10 px-3.5 text-xs font-semibold transition hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
             >

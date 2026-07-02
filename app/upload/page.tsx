@@ -82,7 +82,7 @@ export default function UploadPage() {
             Phase 1 simulates extraction with sample data — nothing is uploaded anywhere.
           </p>
           {pendingCount > 0 ? (
-            <Link href="/review" className="mt-4 block">
+            <Link href="/coach" className="mt-4 block">
               <Card className="flex items-center justify-between gap-3 transition active:scale-[0.99]">
                 <span className="text-sm font-semibold">
                   {pendingCount} earlier transactions still need answers
@@ -108,7 +108,7 @@ export default function UploadPage() {
           </Card>
           {pendingCount > 0 ? (
             <Link
-              href="/review"
+              href="/coach"
               className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.99] dark:bg-cloud dark:text-ink"
             >
               Review {pendingCount} transactions
@@ -193,7 +193,7 @@ export default function UploadPage() {
           </Card>
           {pendingCount > 0 ? (
             <Link
-              href="/review"
+              href="/coach"
               className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.99] dark:bg-cloud dark:text-ink"
             >
               Review {pendingCount} transactions

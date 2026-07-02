@@ -3,13 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  CalendarDays,
-  Camera,
   Home,
+  ListChecks,
   MessageCircle,
   ReceiptText,
-  Sparkles,
-  WalletCards
+  Sparkles
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useStore } from "@/lib/store";
@@ -17,10 +15,9 @@ import { ThemeToggle } from "./theme-toggle";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/review", label: "Review", icon: MessageCircle },
+  { href: "/coach", label: "Coach", icon: MessageCircle },
   { href: "/transactions", label: "Activity", icon: ReceiptText },
-  { href: "/budget", label: "Budget", icon: WalletCards },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/plan", label: "Plan", icon: ListChecks },
   { href: "/insights", label: "Insights", icon: Sparkles }
 ];
 
@@ -47,32 +44,24 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
               <p className="mt-0.5 text-sm text-ink/50 dark:text-cloud/50">{subtitle}</p>
             ) : null}
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/upload"
-              aria-label="Upload screenshot"
-              className={clsx(
-                "grid size-9 place-items-center rounded-full border transition",
-                pathname === "/upload"
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                  : "border-black/[0.07] bg-white text-ink/60 hover:text-ink dark:border-white/10 dark:bg-white/[0.06] dark:text-cloud/60 dark:hover:text-cloud"
-              )}
-            >
-              <Camera className="size-4" aria-hidden="true" />
-            </Link>
-            <ThemeToggle />
-          </div>
+          <ThemeToggle />
         </div>
       </header>
 
       <main className="flex-1 px-5 pb-6 pt-2">{children}</main>
 
       <nav className="sticky bottom-0 z-30 border-t border-black/[0.06] bg-white/90 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2 backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0b0c10]/90">
-        <div className="grid grid-cols-6">
+        <div className="grid grid-cols-5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
-            const showBadge = item.href === "/review" && pendingCount > 0;
+            const active =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname === item.href ||
+                  (item.href === "/plan" &&
+                    ["/budget", "/calendar"].includes(pathname)) ||
+                  (item.href === "/coach" && pathname === "/review");
+            const showBadge = item.href === "/coach" && pendingCount > 0;
 
             return (
               <Link

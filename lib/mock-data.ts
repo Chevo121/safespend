@@ -1,4 +1,4 @@
-import type { Budget, ScheduledPayment, Transaction } from "./types";
+import type { Budget, Debt, SavingsGoal, ScheduledPayment, Transaction } from "./types";
 
 export const defaultBudget: Budget = {
   fixedMonthlyIncome: 65000,
@@ -21,6 +21,26 @@ export const defaultScheduledPayments: ScheduledPayment[] = [
     amountMxn: 599,
     dayOfMonth: 23,
     category: "Internet & phone"
+  }
+];
+
+export const defaultGoals: SavingsGoal[] = [
+  {
+    id: "goal-desk",
+    name: "Standing desk",
+    targetMxn: 12000,
+    savedMxn: 3000,
+    monthlyMxn: 1500
+  }
+];
+
+export const defaultDebts: Debt[] = [
+  {
+    id: "debt-didi",
+    name: "Didi Préstamos",
+    balanceMxn: 18500,
+    monthlyPaymentMxn: 1684,
+    dueDayOfMonth: 1
   }
 ];
 

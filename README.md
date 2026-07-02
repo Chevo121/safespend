@@ -4,15 +4,16 @@ Mobile-first personal finance tracker for ARQ / DolarApp screenshots. Phase 1 ru
 
 **Core loop:** screenshot in → extraction (simulated) → chat-style review of ambiguous transactions → dashboard updates safe-to-spend.
 
-## Pages
+## Pages (5-tab layout)
 
-- **Today (`/`)** — safe-to-spend-today hero with safe/tight/over status, remaining monthly budget, month-end projection (both bill-aware), upcoming bills, girlfriend spend, category bars, recent activity.
-- **Review (`/review`)** — chat-style clarification flow with tappable option chips plus free-text answers. Uber rides ask who they were for; Amazon/MercadoPago/Apple ask what the purchase was; girlfriend transfers ask the spend type and whether it counts toward girlfriend spend. "Always use this answer" saves a merchant rule that auto-categorizes future imports.
-- **Upload (`/upload`)** — simulated screenshot extraction with duplicate detection: exact re-imports are dropped, ambiguous same-day twins are flagged for review.
+- **Today (`/`)** — safe-to-spend-today hero with safe/tight/over status, remaining monthly budget, month-end projection (bill- and debt-aware), upcoming bills, girlfriend spend, goals, category bars, recent activity, and a floating upload button.
+- **Coach (`/coach`)** — one conversation for everything: clarification questions after an upload (tappable chips, free-text answers, "always use this answer" rules) plus a financial Q&A that answers from your data — "Can I afford a desk for $12,000?" computes whether it fits this month or offers tappable saving paces that create a goal.
 - **Activity (`/transactions`)** — filterable transaction list; tap any row to change its answer or toggle girlfriend spend.
-- **Budget (`/budget`)** — flexible-pool explainer (income − savings − upcoming bills − spent), grouped category limits (editable), and merchant-rule management.
-- **Calendar (`/calendar`)** — monthly-recurring scheduled payments (rent, internet, …). Anything still due this month is reserved before safe-to-spend is calculated.
-- **Insights (`/insights`)** — girlfriend spend, upcoming bills, transport, excluded self-transfers, debt payments, largest transaction.
+- **Plan (`/plan`)** — four segments: **Budget** (flexible pool, editable category limits, merchant rules), **Bills** (calendar of monthly scheduled payments; anything still due is reserved before safe-to-spend), **Goals** (target / saved / monthly pace with ETA), **Debts** (balance, monthly payment, due day, payoff estimate; payments reserved like bills and shown on the calendar).
+- **Insights (`/insights`)** — girlfriend spend, upcoming bills, debt outstanding, transport, excluded self-transfers, largest transaction.
+- **Upload (`/upload`)** — reached from the dashboard's floating button; simulated extraction with duplicate detection: exact re-imports are dropped, ambiguous same-day twins are flagged for review.
+
+`/review`, `/budget`, and `/calendar` redirect into the consolidated pages.
 
 State lives in a small client-side store (React context + `localStorage`), so review answers flow into every page. Girlfriend spend is a cross-cutting tag with subcategories, never tied to a name. Light and dark mode are both supported, and the app is installable to the iPhone home screen (PWA manifest + icons).
 

@@ -1,5 +1,5 @@
 import { defaultBudget, defaultLimits } from "./mock-data";
-import type { ScheduledPayment, Transaction } from "./types";
+import type { Debt, SavingsGoal, ScheduledPayment, Transaction } from "./types";
 
 export const currency = new Intl.NumberFormat("es-MX", {
   style: "currency",
@@ -25,6 +25,15 @@ const daysInMonth = 31;
 const daysElapsed = 2;
 const daysLeft = daysInMonth - daysElapsed + 1;
 
+const monthYearFormatter = new Intl.DateTimeFormat("en", {
+  month: "long",
+  year: "numeric"
+});
+
+export function monthLabelFromNow(months: number) {
+  return monthYearFormatter.format(new Date(demoMonth.year, demoMonth.month + months, 1));
+}
+
 export type SpendStatus = "safe" | "tight" | "over";
 
 export const statusLabel: Record<SpendStatus, string> = {
@@ -45,19 +54,55 @@ export function isSpending(transaction: Transaction) {
   return transaction.amountMxn < 0;
 }
 
+export type Commitment = {
+  id: string;
+  name: string;
+  amountMxn: number;
+  dayOfMonth: number;
+  kind: "bill" | "debt";
+};
+
+export function getCommitments(
+  payments: ScheduledPayment[],
+  debts: Debt[]
+): Commitment[] {
+  return [
+    ...payments.map((p) => ({
+      id: p.id,
+      name: p.name,
+      amountMxn: p.amountMxn,
+      dayOfMonth: p.dayOfMonth,
+      kind: "bill" as const
+    })),
+    ...debts
+      .filter((d) => d.balanceMxn > 0)
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        amountMxn: Math.min(d.monthlyPaymentMxn, d.balanceMxn),
+        dayOfMonth: d.dueDayOfMonth,
+        kind: "debt" as const
+      }))
+  ].sort((a, b) => a.dayOfMonth - b.dayOfMonth);
+}
+
 export function getDashboardMetrics(
   transactions: Transaction[],
-  payments: ScheduledPayment[] = []
+  payments: ScheduledPayment[] = [],
+  debts: Debt[] = []
 ) {
   const spending = transactions.filter(isSpending);
   const actualSpend = spending.reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 
-  // Scheduled bills still due this month get reserved before anything is "safe".
-  const committedTotal = payments.reduce((total, p) => total + p.amountMxn, 0);
-  const upcomingPayments = payments
-    .filter((p) => p.dayOfMonth >= daysElapsed)
-    .sort((a, b) => a.dayOfMonth - b.dayOfMonth);
-  const committedRemaining = upcomingPayments.reduce((total, p) => total + p.amountMxn, 0);
+  // Scheduled bills and debt payments still due this month get reserved
+  // before anything is "safe".
+  const commitments = getCommitments(payments, debts);
+  const committedTotal = commitments.reduce((total, c) => total + c.amountMxn, 0);
+  const upcomingCommitments = commitments.filter((c) => c.dayOfMonth >= daysElapsed);
+  const committedRemaining = upcomingCommitments.reduce(
+    (total, c) => total + c.amountMxn,
+    0
+  );
 
   const remainingBudget = defaultBudget.monthlySpendCap - actualSpend;
   const discretionaryRemaining = remainingBudget - committedRemaining;
@@ -104,7 +149,7 @@ export function getDashboardMetrics(
     remainingBudget,
     committedTotal,
     committedRemaining,
-    upcomingPayments,
+    upcomingCommitments,
     discretionaryRemaining,
     safeToSpendToday,
     dailyBaseline,
@@ -118,6 +163,34 @@ export function getDashboardMetrics(
     girlfriendSpend,
     pendingClarifications
   };
+}
+
+export function getGoalEta(goal: SavingsGoal) {
+  const remaining = Math.max(goal.targetMxn - goal.savedMxn, 0);
+
+  if (remaining === 0) {
+    return { monthsLeft: 0, label: "Funded", remaining };
+  }
+
+  if (goal.monthlyMxn <= 0) {
+    return { monthsLeft: null, label: "Set a monthly amount", remaining };
+  }
+
+  const monthsLeft = Math.ceil(remaining / goal.monthlyMxn);
+  return { monthsLeft, label: monthLabelFromNow(monthsLeft), remaining };
+}
+
+export function getDebtPayoff(debt: Debt) {
+  if (debt.balanceMxn <= 0) {
+    return { monthsLeft: 0, label: "Paid off" };
+  }
+
+  if (debt.monthlyPaymentMxn <= 0) {
+    return { monthsLeft: null, label: "Set a monthly payment" };
+  }
+
+  const monthsLeft = Math.ceil(debt.balanceMxn / debt.monthlyPaymentMxn);
+  return { monthsLeft, label: monthLabelFromNow(monthsLeft) };
 }
 
 export function getGirlfriendBreakdown(transactions: Transaction[]) {
@@ -265,7 +338,7 @@ export function getBudgetGroups(
   ];
 }
 
-export function getInsights(transactions: Transaction[]) {
+export function getInsights(transactions: Transaction[], debts: Debt[] = []) {
   const spending = transactions.filter(isSpending);
 
   const transportSpend = transactions
@@ -277,6 +350,7 @@ export function getInsights(transactions: Transaction[]) {
     .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 
   const debtPayments = totalByCategories(transactions, ["Debt payment"]);
+  const totalDebtBalance = debts.reduce((total, d) => total + Math.max(d.balanceMxn, 0), 0);
 
   const largestTransaction = spending.reduce<Transaction | null>(
     (largest, tx) =>
@@ -284,7 +358,13 @@ export function getInsights(transactions: Transaction[]) {
     null
   );
 
-  return { transportSpend, selfTransferExcluded, debtPayments, largestTransaction };
+  return {
+    transportSpend,
+    selfTransferExcluded,
+    debtPayments,
+    totalDebtBalance,
+    largestTransaction
+  };
 }
 
 export function getProgressTone(percent: number): SpendStatus {

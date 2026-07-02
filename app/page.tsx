@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, ChevronRight, Heart, MessagesSquare, PiggyBank } from "lucide-react";
+import {
+  CalendarClock,
+  Camera,
+  ChevronRight,
+  Heart,
+  MessagesSquare,
+  PiggyBank,
+  Target
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { TransactionRow } from "@/components/transaction-row";
 import { Card, ProgressBar, Section, StatusPill } from "@/components/ui";
@@ -10,6 +18,7 @@ import {
   getBudgetGroups,
   getDashboardMetrics,
   getGirlfriendBreakdown,
+  getGoalEta,
   getProgressTone,
   statusLabel
 } from "@/lib/calculations";
@@ -28,8 +37,8 @@ const heroPill: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { transactions, payments, limits } = useStore();
-  const metrics = getDashboardMetrics(transactions, payments);
+  const { transactions, payments, debts, goals, limits } = useStore();
+  const metrics = getDashboardMetrics(transactions, payments, debts);
   const girlfriendBreakdown = getGirlfriendBreakdown(transactions);
 
   const categoryRows = getBudgetGroups(transactions, limits)
@@ -41,7 +50,8 @@ export default function DashboardPage() {
 
   const recent = transactions.slice(0, 4);
   const girlfriendLimit = limits["Girlfriend spend"] ?? 5000;
-  const nextPayments = metrics.upcomingPayments.slice(0, 3);
+  const nextCommitments = metrics.upcomingCommitments.slice(0, 3);
+  const topGoals = goals.slice(0, 2);
 
   return (
     <AppShell title="Today" subtitle={`July 2026 · Day ${metrics.daysElapsed} of ${metrics.daysInMonth}`}>
@@ -64,7 +74,7 @@ export default function DashboardPage() {
           </p>
           <p className="mt-2 text-sm text-white/55">
             {currency.format(metrics.discretionaryRemaining)} free after{" "}
-            {currency.format(metrics.committedRemaining)} reserved for bills ÷{" "}
+            {currency.format(metrics.committedRemaining)} reserved for bills & debt ÷{" "}
             {metrics.daysLeft} days
           </p>
 
@@ -105,7 +115,7 @@ export default function DashboardPage() {
 
       {/* Pending clarifications action card */}
       {metrics.pendingClarifications > 0 ? (
-        <Link href="/review" className="mb-4 block">
+        <Link href="/coach" className="mb-4 block">
           <Card className="flex items-center gap-3 border-amber-500/30 bg-amber-500/[0.08] transition active:scale-[0.99] dark:bg-amber-500/10">
             <span className="grid size-10 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400">
               <MessagesSquare className="size-5" aria-hidden="true" />
@@ -115,7 +125,7 @@ export default function DashboardPage() {
                 {metrics.pendingClarifications} transactions need answers
               </span>
               <span className="mt-0.5 block text-sm text-ink/55 dark:text-cloud/55">
-                Quick taps — they sharpen today&apos;s number.
+                Quick taps in Coach — they sharpen today&apos;s number.
               </span>
             </span>
             <ChevronRight className="size-5 shrink-0 text-ink/35 dark:text-cloud/35" aria-hidden="true" />
@@ -123,9 +133,9 @@ export default function DashboardPage() {
         </Link>
       ) : null}
 
-      {/* Upcoming scheduled payments */}
-      {nextPayments.length > 0 ? (
-        <Link href="/calendar" className="mb-7 block">
+      {/* Upcoming bills & debt payments */}
+      {nextCommitments.length > 0 ? (
+        <Link href="/plan?tab=bills" className="mb-7 block">
           <Card className="transition active:scale-[0.99]">
             <div className="flex items-center gap-3">
               <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sky-500/12 text-sky-600 dark:text-sky-400">
@@ -140,14 +150,19 @@ export default function DashboardPage() {
               <ChevronRight className="size-5 shrink-0 text-ink/35 dark:text-cloud/35" aria-hidden="true" />
             </div>
             <div className="mt-3 space-y-2 border-t border-black/[0.05] pt-3 dark:border-white/[0.06]">
-              {nextPayments.map((payment) => (
-                <div key={payment.id} className="flex items-center gap-3 text-sm">
+              {nextCommitments.map((commitment) => (
+                <div key={commitment.id} className="flex items-center gap-3 text-sm">
                   <span className="tnum grid w-9 shrink-0 place-items-center rounded-lg bg-black/[0.05] py-1 text-xs font-bold text-ink/60 dark:bg-white/[0.08] dark:text-cloud/60">
-                    {payment.dayOfMonth}
+                    {commitment.dayOfMonth}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-medium">{payment.name}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {commitment.name}
+                    {commitment.kind === "debt" ? (
+                      <span className="ml-1.5 text-xs text-rose-500">debt</span>
+                    ) : null}
+                  </span>
                   <span className="tnum shrink-0 font-semibold">
-                    {currency.format(payment.amountMxn)}
+                    {currency.format(commitment.amountMxn)}
                   </span>
                 </div>
               ))}
@@ -193,11 +208,50 @@ export default function DashboardPage() {
         </Card>
       </Section>
 
+      {/* Goals */}
+      {topGoals.length > 0 ? (
+        <Section
+          title="Goals"
+          action={
+            <Link
+              href="/plan?tab=goals"
+              className="text-sm font-semibold text-emerald-700 dark:text-emerald-400"
+            >
+              All goals
+            </Link>
+          }
+        >
+          <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
+            {topGoals.map((goal) => {
+              const eta = getGoalEta(goal);
+              const percent = goal.targetMxn > 0 ? goal.savedMxn / goal.targetMxn : 0;
+
+              return (
+                <div key={goal.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
+                    <Target className="size-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="truncate font-semibold">{goal.name}</p>
+                      <p className="tnum shrink-0 text-xs text-ink/45 dark:text-cloud/45">
+                        {eta.monthsLeft === 0 ? "Funded" : eta.label}
+                      </p>
+                    </div>
+                    <ProgressBar percent={percent} tone="safe" className="mt-2" />
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+        </Section>
+      ) : null}
+
       {/* Category spend */}
       <Section
         title="Where it's going"
         action={
-          <Link href="/budget" className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+          <Link href="/plan" className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
             Budgets
           </Link>
         }
@@ -256,6 +310,15 @@ export default function DashboardPage() {
         </div>
         <StatusPill tone="safe">On track</StatusPill>
       </Card>
+
+      {/* Floating upload action */}
+      <Link
+        href="/upload"
+        aria-label="Upload screenshot"
+        className="fixed bottom-24 right-5 z-40 grid size-14 place-items-center rounded-full bg-emerald-600 text-white shadow-soft transition hover:bg-emerald-500 active:scale-95 sm:right-[calc(50%-13rem)]"
+      >
+        <Camera className="size-6" aria-hidden="true" />
+      </Link>
     </AppShell>
   );
 }

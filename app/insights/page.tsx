@@ -31,10 +31,15 @@ type Insight = {
 };
 
 export default function InsightsPage() {
-  const { transactions, payments } = useStore();
-  const metrics = getDashboardMetrics(transactions, payments);
-  const { transportSpend, selfTransferExcluded, debtPayments, largestTransaction } =
-    getInsights(transactions);
+  const { transactions, payments, debts } = useStore();
+  const metrics = getDashboardMetrics(transactions, payments, debts);
+  const {
+    transportSpend,
+    selfTransferExcluded,
+    debtPayments,
+    totalDebtBalance,
+    largestTransaction
+  } = getInsights(transactions, debts);
 
   const insights: Insight[] = [
     {
@@ -49,7 +54,14 @@ export default function InsightsPage() {
       tone: "info",
       title: "Bills still coming",
       value: currency.format(metrics.committedRemaining),
-      body: "Scheduled payments due later this month. Already reserved out of your safe-to-spend."
+      body: "Bills and debt payments due later this month. Already reserved out of your safe-to-spend."
+    },
+    {
+      icon: Banknote,
+      tone: "over",
+      title: "Debt outstanding",
+      value: currency.format(totalDebtBalance),
+      body: "Total balance across tracked debts. Payoff estimates live in Plan → Debts."
     },
     {
       icon: Car,
@@ -68,9 +80,9 @@ export default function InsightsPage() {
     {
       icon: Banknote,
       tone: "safe",
-      title: "Debt payment",
+      title: "Debt paid this month",
       value: currency.format(debtPayments),
-      body: "Didi Préstamos this month. Debt payments are tracked apart from day-to-day spend."
+      body: "Confirmed debt payments from your screenshots. Tracked apart from day-to-day spend."
     },
     ...(largestTransaction
       ? [
@@ -88,7 +100,7 @@ export default function InsightsPage() {
   return (
     <AppShell title="Insights" subtitle="Where July's money is actually going">
       {metrics.pendingClarifications > 0 ? (
-        <Link href="/review" className="mb-7 block">
+        <Link href="/coach" className="mb-7 block">
           <Card className="flex items-center gap-3 border-amber-500/30 bg-amber-500/[0.08] transition active:scale-[0.99] dark:bg-amber-500/10">
             <span className="grid size-10 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400">
               <MessagesSquare className="size-5" aria-hidden="true" />

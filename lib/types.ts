@@ -60,6 +60,22 @@ export type ScheduledPayment = {
   category: string;
 };
 
+export type SavingsGoal = {
+  id: string;
+  name: string;
+  targetMxn: number;
+  savedMxn: number;
+  monthlyMxn: number;
+};
+
+export type Debt = {
+  id: string;
+  name: string;
+  balanceMxn: number;
+  monthlyPaymentMxn: number;
+  dueDayOfMonth: number;
+};
+
 export type MerchantRule = {
   merchant: string;
   category: string;

@@ -9,18 +9,28 @@ import {
   useState
 } from "react";
 import {
+  defaultDebts,
+  defaultGoals,
   defaultLimits,
   defaultScheduledPayments,
   mockSecondBatch,
   mockTransactions
 } from "./mock-data";
-import type { MerchantRule, ScheduledPayment, Transaction } from "./types";
+import type {
+  Debt,
+  MerchantRule,
+  SavingsGoal,
+  ScheduledPayment,
+  Transaction
+} from "./types";
 
 const KEYS = {
   state: "safespend.v3.state",
   rules: "safespend.v3.rules",
   payments: "safespend.v3.payments",
-  limits: "safespend.v3.limits"
+  limits: "safespend.v3.limits",
+  goals: "safespend.v3.goals",
+  debts: "safespend.v3.debts"
 };
 
 export type ImportResult = {
@@ -39,6 +49,8 @@ type Store = {
   rules: MerchantRule[];
   payments: ScheduledPayment[];
   limits: Record<string, number>;
+  goals: SavingsGoal[];
+  debts: Debt[];
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
   reopenTransaction: (id: string) => void;
   toggleGirlfriend: (id: string) => void;
@@ -47,6 +59,12 @@ type Store = {
   addPayment: (payment: Omit<ScheduledPayment, "id">) => void;
   updatePayment: (id: string, patch: Partial<ScheduledPayment>) => void;
   removePayment: (id: string) => void;
+  addGoal: (goal: Omit<SavingsGoal, "id">) => void;
+  updateGoal: (id: string, patch: Partial<SavingsGoal>) => void;
+  removeGoal: (id: string) => void;
+  addDebt: (debt: Omit<Debt, "id">) => void;
+  updateDebt: (id: string, patch: Partial<Debt>) => void;
+  removeDebt: (id: string) => void;
   setLimit: (label: string, value: number) => void;
   importNextBatch: () => ImportResult | null;
   resetDemo: () => void;
@@ -95,6 +113,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [rules, setRules] = useState<MerchantRule[]>([]);
   const [payments, setPayments] = useState<ScheduledPayment[]>(defaultScheduledPayments);
   const [limits, setLimits] = useState<Record<string, number>>(defaultLimits);
+  const [goals, setGoals] = useState<SavingsGoal[]>(defaultGoals);
+  const [debts, setDebts] = useState<Debt[]>(defaultDebts);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -132,6 +152,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setLimits({ ...defaultLimits, ...storedLimits });
     }
 
+    const storedGoals = load<SavingsGoal[]>(KEYS.goals, Array.isArray);
+    if (storedGoals) {
+      setGoals(storedGoals);
+    }
+
+    const storedDebts = load<Debt[]>(KEYS.debts, Array.isArray);
+    if (storedDebts) {
+      setDebts(storedDebts);
+    }
+
     setHydrated(true);
   }, []);
 
@@ -158,6 +188,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       save(KEYS.limits, limits);
     }
   }, [limits, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) {
+      save(KEYS.goals, goals);
+    }
+  }, [goals, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) {
+      save(KEYS.debts, debts);
+    }
+  }, [debts, hydrated]);
 
   const updateTransaction = useCallback((id: string, patch: Partial<Transaction>) => {
     setTransactions((current) =>
@@ -222,6 +264,40 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const removePayment = useCallback((id: string) => {
     setPayments((current) => current.filter((payment) => payment.id !== id));
+  }, []);
+
+  const addGoal = useCallback((goal: Omit<SavingsGoal, "id">) => {
+    setGoals((current) => [
+      ...current,
+      { ...goal, id: `goal-${Date.now()}-${Math.round(Math.random() * 1e4)}` }
+    ]);
+  }, []);
+
+  const updateGoal = useCallback((id: string, patch: Partial<SavingsGoal>) => {
+    setGoals((current) =>
+      current.map((goal) => (goal.id === id ? { ...goal, ...patch } : goal))
+    );
+  }, []);
+
+  const removeGoal = useCallback((id: string) => {
+    setGoals((current) => current.filter((goal) => goal.id !== id));
+  }, []);
+
+  const addDebt = useCallback((debt: Omit<Debt, "id">) => {
+    setDebts((current) => [
+      ...current,
+      { ...debt, id: `debt-${Date.now()}-${Math.round(Math.random() * 1e4)}` }
+    ]);
+  }, []);
+
+  const updateDebt = useCallback((id: string, patch: Partial<Debt>) => {
+    setDebts((current) =>
+      current.map((debt) => (debt.id === id ? { ...debt, ...patch } : debt))
+    );
+  }, []);
+
+  const removeDebt = useCallback((id: string) => {
+    setDebts((current) => current.filter((debt) => debt.id !== id));
   }, []);
 
   const setLimit = useCallback((label: string, value: number) => {
@@ -305,6 +381,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       rules,
       payments,
       limits,
+      goals,
+      debts,
       updateTransaction,
       reopenTransaction,
       toggleGirlfriend,
@@ -313,6 +391,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addPayment,
       updatePayment,
       removePayment,
+      addGoal,
+      updateGoal,
+      removeGoal,
+      addDebt,
+      updateDebt,
+      removeDebt,
       setLimit,
       importNextBatch,
       resetDemo
@@ -324,6 +408,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       rules,
       payments,
       limits,
+      goals,
+      debts,
       updateTransaction,
       reopenTransaction,
       toggleGirlfriend,
@@ -332,6 +418,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addPayment,
       updatePayment,
       removePayment,
+      addGoal,
+      updateGoal,
+      removeGoal,
+      addDebt,
+      updateDebt,
+      removeDebt,
       setLimit,
       importNextBatch,
       resetDemo
