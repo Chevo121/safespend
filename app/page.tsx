@@ -157,7 +157,7 @@ export default function DashboardPage() {
 
       {/* Upcoming bills & debt payments */}
       {nextCommitments.length > 0 ? (
-        <Link href="/plan?tab=bills" className="mb-7 block">
+        <Link href="/bills" className="mb-7 block">
           <Card className="transition active:scale-[0.99]">
             <div className="flex items-center gap-3">
               <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sky-500/12 text-sky-600 dark:text-sky-400">
@@ -236,7 +236,7 @@ export default function DashboardPage() {
           title="Goals"
           action={
             <Link
-              href="/plan?tab=goals"
+              href="/goals"
               className="text-sm font-semibold text-emerald-700 dark:text-emerald-400"
             >
               All goals
@@ -273,7 +273,7 @@ export default function DashboardPage() {
       <Section
         title="Where it's going"
         action={
-          <Link href="/plan" className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+          <Link href="/budget" className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
             Budgets
           </Link>
         }

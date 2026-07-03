@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ChevronLeft,
   Home,
   ListChecks,
   MessageCircle,
-  ReceiptText,
-  Sparkles
+  ReceiptText
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useStore } from "@/lib/store";
@@ -17,17 +17,21 @@ const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/coach", label: "Coach", icon: MessageCircle },
   { href: "/transactions", label: "Activity", icon: ReceiptText },
-  { href: "/plan", label: "Plan", icon: ListChecks },
-  { href: "/insights", label: "Insights", icon: Sparkles }
+  { href: "/plan", label: "Plan", icon: ListChecks }
 ];
+
+// Routes that are spokes of the Plan hub — the Plan tab stays lit on them.
+const planRoutes = ["/plan", "/budget", "/bills", "/goals", "/debts", "/calendar", "/insights"];
 
 type AppShellProps = {
   children: React.ReactNode;
   title: string;
   subtitle?: string;
+  backHref?: string;
+  backLabel?: string;
 };
 
-export function AppShell({ children, title, subtitle }: AppShellProps) {
+export function AppShell({ children, title, subtitle, backHref, backLabel }: AppShellProps) {
   const pathname = usePathname();
   const { pendingCount } = useStore();
 
@@ -35,10 +39,20 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col sm:my-6 sm:min-h-[calc(100vh-3rem)] sm:overflow-hidden sm:rounded-[32px] sm:border sm:border-black/[0.06] sm:bg-white/40 sm:shadow-soft sm:backdrop-blur dark:sm:border-white/[0.08] dark:sm:bg-white/[0.02]">
       <header className="sticky top-0 z-20 border-b border-black/[0.04] bg-[#f5f5f8]/90 px-5 pb-3 pt-[max(env(safe-area-inset-top),1.25rem)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-[#0b0c10]/90">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
-              SafeSpend
-            </p>
+          <div className="min-w-0">
+            {backHref ? (
+              <Link
+                href={backHref}
+                className="-ml-1 mb-0.5 inline-flex items-center gap-0.5 text-[13px] font-semibold text-emerald-700 dark:text-emerald-400"
+              >
+                <ChevronLeft className="size-4" aria-hidden="true" />
+                {backLabel ?? "Back"}
+              </Link>
+            ) : (
+              <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
+                SafeSpend
+              </p>
+            )}
             <h1 className="mt-0.5 text-2xl font-bold tracking-tight">{title}</h1>
             {subtitle ? (
               <p className="mt-0.5 text-sm text-ink/50 dark:text-cloud/50">{subtitle}</p>
@@ -51,16 +65,17 @@ export function AppShell({ children, title, subtitle }: AppShellProps) {
       <main className="flex-1 px-5 pb-6 pt-2">{children}</main>
 
       <nav className="sticky bottom-0 z-30 border-t border-black/[0.06] bg-white/90 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2 backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0b0c10]/90">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-4">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active =
               item.href === "/"
                 ? pathname === "/"
-                : pathname === item.href ||
-                  (item.href === "/plan" &&
-                    ["/budget", "/calendar"].includes(pathname)) ||
-                  (item.href === "/coach" && pathname === "/review");
+                : item.href === "/plan"
+                  ? planRoutes.includes(pathname)
+                  : item.href === "/coach"
+                    ? pathname === "/coach" || pathname === "/review"
+                    : pathname === item.href;
             const showBadge = item.href === "/coach" && pendingCount > 0;
 
             return (
