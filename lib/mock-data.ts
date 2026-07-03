@@ -1,11 +1,9 @@
 import type { Budget, Debt, SavingsGoal, ScheduledPayment, Transaction } from "./types";
 
 export const defaultBudget: Budget = {
-  fixedMonthlyIncome: 65000,
-  requiredSavings: 16500,
-  monthlySpendCap: 48500,
-  commissionSavingsRate: 0.7,
-  commissionThisMonth: 0
+  income: 65000,
+  savingsReserved: 16500,
+  payDay: 1
 };
 
 export const defaultScheduledPayments: ScheduledPayment[] = [

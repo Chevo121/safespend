@@ -1,12 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { AppShell } from "@/components/app-shell";
-import { PlanDebts } from "@/components/plan-debts";
-
-export default function DebtsPage() {
-  return (
-    <AppShell title="Debts" subtitle="Balances and payoff estimates" backHref="/plan" backLabel="Plan">
-      <PlanDebts />
-    </AppShell>
-  );
+export default function DebtsRedirect() {
+  redirect("/plan#debts");
 }

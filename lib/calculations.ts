@@ -46,14 +46,82 @@ export function getMonthContext(now: Date = new Date()) {
   };
 }
 
-function inMonth(dateIso: string, year: number, month: number) {
-  // transactionDate is a plain "YYYY-MM-DD" string.
-  const [y, m] = dateIso.split("-").map(Number);
-  return y === year && m - 1 === month;
-}
-
 export function monthLabelFromNow(months: number, now: Date = new Date()) {
   return monthYearFormatter.format(new Date(now.getFullYear(), now.getMonth() + months, 1));
+}
+
+const rangeFormatter = new Intl.DateTimeFormat("en", { day: "numeric", month: "short" });
+const DAY_MS = 86_400_000;
+
+function noon(year: number, month: number, day: number) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  return new Date(year, month, Math.min(day, daysInMonth), 12);
+}
+
+function dayCount(from: Date, to: Date) {
+  return Math.round((to.getTime() - from.getTime()) / DAY_MS);
+}
+
+// The budget period is a pay cycle anchored on the pay day, not the calendar
+// month. The deposit lands on `payDay`; the period runs to the day before the
+// next deposit.
+export type PeriodContext = {
+  start: Date;
+  nextStart: Date;
+  daysInPeriod: number;
+  daysElapsed: number;
+  daysLeft: number;
+  label: string;
+  monthName: string;
+};
+
+export function getPeriodContext(now: Date = new Date(), payDay = 1): PeriodContext {
+  const today = noon(now.getFullYear(), now.getMonth(), now.getDate());
+  const anchorThis = noon(now.getFullYear(), now.getMonth(), payDay);
+
+  const start =
+    today.getTime() >= anchorThis.getTime()
+      ? anchorThis
+      : noon(now.getFullYear(), now.getMonth() - 1, payDay);
+  const nextStart = noon(start.getFullYear(), start.getMonth() + 1, payDay);
+
+  const daysInPeriod = Math.max(dayCount(start, nextStart), 1);
+  const daysElapsed = Math.min(Math.max(dayCount(start, today) + 1, 1), daysInPeriod);
+  const daysLeft = Math.max(daysInPeriod - daysElapsed + 1, 1);
+
+  const lastDay = new Date(nextStart.getTime() - DAY_MS);
+  const label =
+    payDay === 1
+      ? monthYearFormatter.format(start)
+      : `${rangeFormatter.format(start)} – ${rangeFormatter.format(lastDay)}`;
+
+  return {
+    start,
+    nextStart,
+    daysInPeriod,
+    daysElapsed,
+    daysLeft,
+    label,
+    monthName: monthNameFormatter.format(start)
+  };
+}
+
+function inPeriod(dateIso: string, period: PeriodContext) {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  const t = noon(y, m - 1, d).getTime();
+  return t >= period.start.getTime() && t < period.nextStart.getTime();
+}
+
+// The date a monthly commitment (day-of-month) falls on within this period.
+function commitmentDate(dayOfMonth: number, period: PeriodContext) {
+  const inStartMonth = noon(period.start.getFullYear(), period.start.getMonth(), dayOfMonth);
+  if (
+    inStartMonth.getTime() >= period.start.getTime() &&
+    inStartMonth.getTime() < period.nextStart.getTime()
+  ) {
+    return inStartMonth;
+  }
+  return noon(period.start.getFullYear(), period.start.getMonth() + 1, dayOfMonth);
 }
 
 export type SpendStatus = "safe" | "tight" | "over";
@@ -108,6 +176,12 @@ export function getCommitments(
   ].sort((a, b) => a.dayOfMonth - b.dayOfMonth);
 }
 
+// Spending that draws down the pool this period. Debt payments are excluded
+// because debts are already reserved into the pool up front.
+function isPoolSpend(tx: Transaction) {
+  return isSpending(tx) && tx.category !== "Debt payment";
+}
+
 export function getDashboardMetrics(
   transactions: Transaction[],
   payments: ScheduledPayment[] = [],
@@ -115,58 +189,51 @@ export function getDashboardMetrics(
   budget: Budget = defaultBudget,
   now: Date = new Date()
 ) {
-  const { year, month, daysInMonth, daysElapsed, daysLeft, label, monthName } =
-    getMonthContext(now);
+  const period = getPeriodContext(now, budget.payDay);
+  const { daysInPeriod, daysElapsed, daysLeft, label, monthName } = period;
 
-  // The spend cap is base income minus the savings reserved first, plus the
-  // spendable share of this month's commission (the rest is saved).
-  const commission = budget.commissionThisMonth ?? 0;
-  const commissionSaved = commission * budget.commissionSavingsRate;
-  const commissionSpendable = commission - commissionSaved;
-  const monthlySpendCap = Math.max(
-    budget.fixedMonthlyIncome - budget.requiredSavings + commissionSpendable,
-    0
-  );
-  const savedThisMonth = budget.requiredSavings + commissionSaved;
+  const hasBudget = budget.income > 0;
 
-  const thisMonth = transactions.filter((tx) => inMonth(tx.transactionDate, year, month));
-  const spending = thisMonth.filter(isSpending);
-  const actualSpend = spending.reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
-
-  // Scheduled bills and debt payments still due this month get reserved
-  // before anything is "safe".
-  const commitments = getCommitments(payments, debts);
+  // All bills and debt due this period are reserved up front, so a late-period
+  // bill deflates the number from day one.
+  const commitments = getCommitments(payments, debts).map((c) => ({
+    ...c,
+    date: commitmentDate(c.dayOfMonth, period)
+  }));
   const committedTotal = commitments.reduce((total, c) => total + c.amountMxn, 0);
-  const upcomingCommitments = commitments.filter((c) => c.dayOfMonth >= daysElapsed);
-  const committedRemaining = upcomingCommitments.reduce(
-    (total, c) => total + c.amountMxn,
-    0
+  const upcomingCommitments = commitments.filter(
+    (c) => c.date.getTime() >= period.start.getTime() + (daysElapsed - 1) * DAY_MS
   );
+  const committedRemaining = upcomingCommitments.reduce((total, c) => total + c.amountMxn, 0);
 
-  const remainingBudget = monthlySpendCap - actualSpend;
-  const discretionaryRemaining = remainingBudget - committedRemaining;
-  const safeToSpendToday = discretionaryRemaining / daysLeft;
-  const dailyBaseline = (monthlySpendCap - committedTotal) / daysInMonth;
+  // The pool is fixed for the whole period the moment income lands.
+  const pool = Math.max(budget.income - budget.savingsReserved - committedTotal, 0);
 
-  const ratio = dailyBaseline > 0 ? safeToSpendToday / dailyBaseline : 0;
-  const spendStatus: SpendStatus =
-    discretionaryRemaining <= 0 || ratio < 0.65 ? "over" : ratio < 1 ? "tight" : "safe";
+  const thisPeriod = transactions.filter((tx) => inPeriod(tx.transactionDate, period));
+  const spent = thisPeriod
+    .filter(isPoolSpend)
+    .reduce((total, tx) => total + Math.abs(tx.amountMxn), 0);
 
-  // Blend observed pace with the daily budget so early-month days don't swing wildly.
-  const observedPace = actualSpend / daysElapsed;
-  const blendedPace =
-    (observedPace * daysElapsed + dailyBaseline * (daysInMonth - daysElapsed)) / daysInMonth;
-  const projectedSpend =
-    actualSpend + committedRemaining + blendedPace * (daysInMonth - daysElapsed);
-  const projectedRemaining = monthlySpendCap - projectedSpend;
+  // Cumulative entitlement: each day grants (pool − granted) / days_left, which
+  // for a fixed pool accrues linearly. Safe-to-spend today is the running
+  // entitlement minus what's been spent — underspend banks as cushion,
+  // overspend draws it down with no cliff.
+  const rateToday = daysInPeriod > 0 ? pool / daysInPeriod : 0;
+  const entitlement = (pool * daysElapsed) / daysInPeriod;
+  const safeToday = entitlement - spent;
+  const cushion = safeToday - rateToday; // buffer carried in before today's grant
+
+  const status: SpendStatus =
+    safeToday <= 0 ? "over" : cushion < 0 ? "tight" : "safe";
+
+  const remaining = pool - spent;
+  const dailyPace = daysElapsed > 0 ? spent / daysElapsed : 0;
+  const projectedSpend = dailyPace * daysInPeriod;
+  const projectedLeftover = pool - projectedSpend;
   const projectionStatus: SpendStatus =
-    projectedRemaining < 0
-      ? "over"
-      : projectedRemaining < monthlySpendCap * 0.1
-        ? "tight"
-        : "safe";
+    projectedLeftover < 0 ? "over" : projectedLeftover < pool * 0.1 ? "tight" : "safe";
 
-  const girlfriendSpend = thisMonth.reduce(
+  const girlfriendSpend = thisPeriod.reduce(
     (total, tx) =>
       total +
       (tx.status === "ignored" || tx.status === "duplicate_candidate"
@@ -180,29 +247,26 @@ export function getDashboardMetrics(
   ).length;
 
   return {
-    monthLabel: label,
+    hasBudget,
+    periodLabel: label,
     monthName,
-    incomeThisMonth: budget.fixedMonthlyIncome,
-    requiredSavings: budget.requiredSavings,
-    actualSaved: savedThisMonth,
-    savedThisMonth,
-    commissionThisMonth: commission,
-    commissionSaved,
-    commissionSpendable,
-    monthlySpendCap,
-    actualSpend,
-    remainingBudget,
+    income: budget.income,
+    savingsReserved: budget.savingsReserved,
+    pool,
     committedTotal,
     committedRemaining,
     upcomingCommitments,
-    discretionaryRemaining,
-    safeToSpendToday,
-    dailyBaseline,
-    spendStatus,
+    spent,
+    rateToday,
+    entitlement,
+    cushion,
+    safeToday,
+    remaining,
     projectedSpend,
-    projectedRemaining,
+    projectedLeftover,
     projectionStatus,
-    daysInMonth,
+    status,
+    daysInPeriod,
     daysElapsed,
     daysLeft,
     girlfriendSpend,
@@ -238,8 +302,12 @@ export function getDebtPayoff(debt: Debt, now: Date = new Date()) {
   return { monthsLeft, label: monthLabelFromNow(monthsLeft, now) };
 }
 
-export function getGirlfriendBreakdown(transactions: Transaction[], now: Date = new Date()) {
-  const { year, month } = getMonthContext(now);
+export function getGirlfriendBreakdown(
+  transactions: Transaction[],
+  now: Date = new Date(),
+  payDay = 1
+) {
+  const period = getPeriodContext(now, payDay);
   const breakdown = new Map<string, number>();
 
   for (const tx of transactions) {
@@ -247,7 +315,7 @@ export function getGirlfriendBreakdown(transactions: Transaction[], now: Date = 
       tx.status === "ignored" ||
       tx.status === "duplicate_candidate" ||
       tx.girlfriendAmountMxn <= 0 ||
-      !inMonth(tx.transactionDate, year, month)
+      !inPeriod(tx.transactionDate, period)
     ) {
       continue;
     }
@@ -303,10 +371,11 @@ function totalByCategories(transactions: Transaction[], categories: string[]) {
 export function getBudgetGroups(
   transactions: Transaction[],
   limits: Record<string, number> = defaultLimits,
-  now: Date = new Date()
+  now: Date = new Date(),
+  payDay = 1
 ): BudgetGroup[] {
-  const { year, month } = getMonthContext(now);
-  const thisMonth = transactions.filter((tx) => inMonth(tx.transactionDate, year, month));
+  const period = getPeriodContext(now, payDay);
+  const thisMonth = transactions.filter((tx) => inPeriod(tx.transactionDate, period));
 
   const girlfriendSpend = thisMonth.reduce(
     (total, tx) =>
@@ -392,10 +461,11 @@ export function getBudgetGroups(
 export function getInsights(
   transactions: Transaction[],
   debts: Debt[] = [],
-  now: Date = new Date()
+  now: Date = new Date(),
+  payDay = 1
 ) {
-  const { year, month } = getMonthContext(now);
-  const thisMonth = transactions.filter((tx) => inMonth(tx.transactionDate, year, month));
+  const period = getPeriodContext(now, payDay);
+  const thisMonth = transactions.filter((tx) => inPeriod(tx.transactionDate, period));
   const spending = thisMonth.filter(isSpending);
 
   const transportSpend = thisMonth

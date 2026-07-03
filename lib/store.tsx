@@ -36,12 +36,15 @@ const KEYS = {
   budget: "safespend.v3.budget"
 };
 
+const AUTO_APPROVE_CONFIDENCE = 0.9;
+
 export type ImportResult = {
   found: number;
   added: number;
   duplicatesRemoved: number;
   flaggedDuplicates: number;
   autoCategorized: number;
+  autoApproved: number;
 };
 
 type Store = {
@@ -173,7 +176,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       (value) =>
         typeof value === "object" &&
         value !== null &&
-        typeof (value as Budget).fixedMonthlyIncome === "number"
+        typeof (value as Budget).income === "number"
     );
     if (storedBudget) {
       setBudgetState({ ...defaultBudget, ...storedBudget });
@@ -324,18 +327,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setBudget = useCallback((patch: Partial<Budget>) => {
-    setBudgetState((current) => {
-      const next = { ...current, ...patch };
-      // Keep the spend cap consistent: income minus savings reserved first,
-      // plus the spendable share of this month's commission.
-      const commissionSpendable =
-        (next.commissionThisMonth ?? 0) * (1 - next.commissionSavingsRate);
-      next.monthlySpendCap = Math.max(
-        next.fixedMonthlyIncome - next.requiredSavings + commissionSpendable,
-        0
-      );
-      return next;
-    });
+    setBudgetState((current) => ({ ...current, ...patch }));
   }, []);
 
   const setLimit = useCallback((label: string, value: number) => {
@@ -353,6 +345,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     let duplicatesRemoved = 0;
     let flaggedDuplicates = 0;
     let autoCategorized = 0;
+    let autoApproved = 0;
 
     for (const tx of mockSecondBatch) {
       const key = fingerprint(tx);
@@ -389,6 +382,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         continue;
       }
 
+      // High-confidence merchants that don't need a beneficiary answer approve
+      // silently — only new or low-confidence transactions surface for review.
+      if (
+        tx.status === "needs_review" &&
+        !alwaysAsk(tx.merchant) &&
+        tx.confidence >= AUTO_APPROVE_CONFIDENCE
+      ) {
+        autoApproved += 1;
+        fresh.push({
+          ...tx,
+          status: "approved",
+          needsClarification: false,
+          clarificationAnswer: "Auto-approved"
+        });
+        continue;
+      }
+
       fresh.push(tx);
     }
 
@@ -400,7 +410,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       added: fresh.length,
       duplicatesRemoved,
       flaggedDuplicates,
-      autoCategorized
+      autoCategorized,
+      autoApproved
     };
   }, [batches, transactions, rules]);
 

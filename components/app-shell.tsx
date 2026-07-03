@@ -2,25 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ChevronLeft,
-  Home,
-  ListChecks,
-  MessageCircle,
-  ReceiptText
-} from "lucide-react";
+import { ChevronLeft, Home, ListChecks, ReceiptText, Sparkles } from "lucide-react";
 import { clsx } from "clsx";
 import { useStore } from "@/lib/store";
 import { ThemeToggle } from "./theme-toggle";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/coach", label: "Coach", icon: MessageCircle },
+  { href: "/ask", label: "Ask", icon: Sparkles },
   { href: "/transactions", label: "Activity", icon: ReceiptText },
   { href: "/plan", label: "Plan", icon: ListChecks }
 ];
 
-// Routes that are spokes of the Plan hub — the Plan tab stays lit on them.
+// Old spoke URLs redirect into the single Plan page; keep the tab lit on them.
 const planRoutes = ["/plan", "/budget", "/bills", "/goals", "/debts", "/calendar", "/insights"];
 
 type AppShellProps = {
@@ -73,10 +67,11 @@ export function AppShell({ children, title, subtitle, backHref, backLabel }: App
                 ? pathname === "/"
                 : item.href === "/plan"
                   ? planRoutes.includes(pathname)
-                  : item.href === "/coach"
-                    ? pathname === "/coach" || pathname === "/review"
+                  : item.href === "/ask"
+                    ? pathname === "/ask" || pathname === "/coach"
                     : pathname === item.href;
-            const showBadge = item.href === "/coach" && pendingCount > 0;
+            // Review now happens inline on Home, so the count badges Home.
+            const showBadge = item.href === "/" && pendingCount > 0;
 
             return (
               <Link

@@ -16,10 +16,10 @@ export function PlanBudget() {
   const { transactions, payments, debts, limits, setLimit, rules, removeRule, budget, setBudget } =
     useStore();
   const [editing, setEditing] = useState(false);
-  const [editingBudget, setEditingBudget] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(!budget.income);
   const metrics = getDashboardMetrics(transactions, payments, debts, budget);
-  const groups = getBudgetGroups(transactions, limits);
-  const poolUsed = metrics.monthlySpendCap > 0 ? metrics.actualSpend / metrics.monthlySpendCap : 0;
+  const groups = getBudgetGroups(transactions, limits, new Date(), budget.payDay);
+  const poolUsed = metrics.pool > 0 ? metrics.spent / metrics.pool : 0;
 
   return (
     <>
@@ -38,71 +38,56 @@ export function PlanBudget() {
           {editingBudget ? (
             <div className="space-y-3">
               <BudgetField
-                label="Monthly income"
-                value={budget.fixedMonthlyIncome}
-                onChange={(value) => setBudget({ fixedMonthlyIncome: value })}
+                label="Income each pay cycle"
+                value={budget.income}
+                onChange={(value) => setBudget({ income: value })}
               />
               <BudgetField
                 label="Savings reserved first"
-                value={budget.requiredSavings}
-                onChange={(value) => setBudget({ requiredSavings: value })}
-              />
-              <BudgetField
-                label="Commission this month"
-                value={budget.commissionThisMonth}
-                onChange={(value) => setBudget({ commissionThisMonth: value })}
+                value={budget.savingsReserved}
+                onChange={(value) => setBudget({ savingsReserved: value })}
               />
               <label className="flex items-center justify-between gap-3">
-                <span className="text-sm text-ink/55 dark:text-cloud/55">
-                  Commission saved (%)
-                </span>
+                <span className="text-sm text-ink/55 dark:text-cloud/55">Pay day (of month)</span>
                 <NumberField
                   allowDecimal={false}
-                  max={100}
-                  ariaLabel="Commission saved percent"
-                  value={Math.round(budget.commissionSavingsRate * 100)}
-                  onChange={(value) => setBudget({ commissionSavingsRate: value / 100 })}
+                  max={31}
+                  ariaLabel="Pay day of month"
+                  value={budget.payDay}
+                  onChange={(value) => setBudget({ payDay: Math.min(Math.max(value, 1), 31) })}
                   className="tnum min-h-10 w-24 rounded-lg border border-emerald-500/40 bg-white px-3 text-right text-sm font-semibold outline-none focus:border-emerald-500 dark:border-emerald-400/40 dark:bg-white/[0.06]"
                 />
               </label>
-              {metrics.commissionThisMonth > 0 ? (
-                <p className="rounded-lg bg-emerald-500/[0.08] px-3 py-2 text-xs leading-5 text-emerald-800 dark:text-emerald-300">
-                  Commission split: {currency.format(metrics.commissionSpendable)} to spend,{" "}
-                  {currency.format(metrics.commissionSaved)} to savings.
-                </p>
-              ) : null}
+              <p className="rounded-lg bg-emerald-500/[0.08] px-3 py-2 text-xs leading-5 text-emerald-800 dark:text-emerald-300">
+                Income lands as one deposit on the {ordinal(budget.payDay)}. Salary and commission
+                go in together — no separate commission entry.
+              </p>
               <div className="flex items-center justify-between gap-3 border-t border-black/[0.05] pt-3 text-sm dark:border-white/[0.06]">
-                <span className="font-semibold">Spend cap this month</span>
-                <span className="tnum font-bold">{currency.format(metrics.monthlySpendCap)}</span>
+                <span className="font-semibold">Spendable this cycle</span>
+                <span className="tnum font-bold">{currency.format(metrics.pool)}</span>
               </div>
             </div>
           ) : (
             <div className="space-y-2 text-sm">
               <div className="flex justify-between gap-3">
-                <span className="text-ink/55 dark:text-cloud/55">Monthly income</span>
-                <span className="tnum font-semibold">
-                  {currency.format(budget.fixedMonthlyIncome)}
+                <span className="text-ink/55 dark:text-cloud/55">Income each cycle</span>
+                <span className="tnum font-semibold">{currency.format(budget.income)}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-ink/55 dark:text-cloud/55">Savings reserved first</span>
+                <span className="tnum font-semibold text-emerald-700 dark:text-emerald-400">
+                  −{currency.format(budget.savingsReserved)}
                 </span>
               </div>
-              {metrics.commissionThisMonth > 0 ? (
-                <div className="flex justify-between gap-3">
-                  <span className="text-ink/55 dark:text-cloud/55">
-                    Commission this month
-                  </span>
-                  <span className="tnum font-semibold">
-                    +{currency.format(metrics.commissionThisMonth)}
-                  </span>
-                </div>
-              ) : null}
               <div className="flex justify-between gap-3">
-                <span className="text-ink/55 dark:text-cloud/55">Saved this month</span>
-                <span className="tnum font-semibold text-emerald-700 dark:text-emerald-400">
-                  −{currency.format(metrics.savedThisMonth)}
+                <span className="text-ink/55 dark:text-cloud/55">Bills & debt reserved</span>
+                <span className="tnum font-semibold text-sky-700 dark:text-sky-400">
+                  −{currency.format(metrics.committedTotal)}
                 </span>
               </div>
               <div className="flex justify-between gap-3 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
-                <span className="font-semibold">Monthly spend cap</span>
-                <span className="tnum font-bold">{currency.format(metrics.monthlySpendCap)}</span>
+                <span className="font-semibold">Spendable this cycle</span>
+                <span className="tnum font-bold">{currency.format(metrics.pool)}</span>
               </div>
             </div>
           )}
@@ -112,45 +97,16 @@ export function PlanBudget() {
       <Section title="Flexible pool">
         <Card>
           <div className="tnum flex items-baseline justify-between gap-3">
-            <p className="text-2xl font-bold">{currency.format(metrics.discretionaryRemaining)}</p>
+            <p className="text-2xl font-bold">{currency.format(metrics.remaining)}</p>
             <p className="text-sm text-ink/50 dark:text-cloud/50">
-              of {currency.format(metrics.monthlySpendCap)}
+              of {currency.format(metrics.pool)}
             </p>
           </div>
           <ProgressBar percent={poolUsed} tone={getProgressTone(poolUsed)} className="mt-3" />
-          <div className="mt-4 space-y-2 border-t border-black/[0.05] pt-3 text-sm dark:border-white/[0.06]">
-            <div className="flex justify-between gap-3">
-              <span className="text-ink/55 dark:text-cloud/55">Fixed monthly income</span>
-              <span className="tnum font-semibold">
-                {currency.format(budget.fixedMonthlyIncome)}
-              </span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-ink/55 dark:text-cloud/55">Savings reserved first</span>
-              <span className="tnum font-semibold text-emerald-700 dark:text-emerald-400">
-                −{currency.format(budget.requiredSavings)}
-              </span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-ink/55 dark:text-cloud/55">Upcoming bills & debt</span>
-              <span className="tnum font-semibold text-sky-700 dark:text-sky-400">
-                −{currency.format(metrics.committedRemaining)}
-              </span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-ink/55 dark:text-cloud/55">Spent so far</span>
-              <span className="tnum font-semibold">−{currency.format(metrics.actualSpend)}</span>
-            </div>
-            <div className="flex justify-between gap-3 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
-              <span className="font-semibold">Free to spend</span>
-              <span className="tnum font-bold">
-                {currency.format(metrics.discretionaryRemaining)}
-              </span>
-            </div>
-          </div>
           <p className="mt-3 text-xs leading-5 text-ink/45 dark:text-cloud/45">
-            Everything that isn&apos;t savings, scheduled bills, or excluded comes out of this
-            one pool. Category limits below are guides, not separate wallets.
+            One pool for everything that isn&apos;t savings, scheduled bills, or excluded.
+            Underspend banks as cushion; leftover sweeps to savings when the cycle closes.
+            Category limits below are guides, not separate wallets.
           </p>
         </Card>
       </Section>
@@ -189,7 +145,7 @@ export function PlanBudget() {
                           allowDecimal={false}
                           value={row.limit}
                           onChange={(value) => setLimit(row.label, value)}
-                          ariaLabel={`${row.label} monthly limit`}
+                          ariaLabel={`${row.label} limit`}
                           className="tnum min-h-9 w-24 rounded-lg border border-emerald-500/40 bg-white px-2 text-right text-sm font-semibold outline-none focus:border-emerald-500 dark:border-emerald-400/40 dark:bg-white/[0.06]"
                         />
                       </label>
@@ -240,7 +196,7 @@ export function PlanBudget() {
           </Card>
         ) : (
           <Card className="py-6 text-center text-sm text-ink/45 dark:text-cloud/45">
-            None yet. In Coach, check “Always use this answer” to skip repeat questions.
+            None yet. When reviewing, check “Always use this answer” to skip repeat questions.
           </Card>
         )}
       </Section>
@@ -268,4 +224,13 @@ function BudgetField({
       />
     </label>
   );
+}
+
+function ordinal(day: number) {
+  const rem10 = day % 10;
+  const rem100 = day % 100;
+  if (rem10 === 1 && rem100 !== 11) return `${day}st`;
+  if (rem10 === 2 && rem100 !== 12) return `${day}nd`;
+  if (rem10 === 3 && rem100 !== 13) return `${day}rd`;
+  return `${day}th`;
 }

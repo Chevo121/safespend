@@ -41,7 +41,7 @@ export default function TransactionsPage() {
   return (
     <AppShell
       title="Activity"
-      subtitle={`${transactions.length} imported · ${currency.format(metrics.actualSpend)} counted, ${currency.format(selfTransferExcluded)} excluded`}
+      subtitle={`${transactions.length} imported · ${currency.format(metrics.spent)} counted, ${currency.format(selfTransferExcluded)} excluded`}
     >
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {filters.map(({ key, label }) => {
@@ -72,7 +72,7 @@ export default function TransactionsPage() {
         })}
       </div>
 
-      <Section title={metrics.monthLabel}>
+      <Section title={metrics.periodLabel}>
         {visible.length > 0 ? (
           <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
             {visible.map((tx) => (

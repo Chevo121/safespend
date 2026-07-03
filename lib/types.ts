@@ -46,11 +46,12 @@ export type Transaction = {
 };
 
 export type Budget = {
-  fixedMonthlyIncome: number;
-  requiredSavings: number;
-  monthlySpendCap: number;
-  commissionSavingsRate: number;
-  commissionThisMonth: number;
+  // The deposit that lands each pay cycle (salary + commission together).
+  income: number;
+  // Amount moved to savings up front, before anything is spendable.
+  savingsReserved: number;
+  // Day of month the deposit lands — anchors the pay cycle.
+  payDay: number;
 };
 
 export type ScheduledPayment = {

@@ -82,10 +82,10 @@ export default function UploadPage() {
             Phase 1 simulates extraction with sample data — nothing is uploaded anywhere.
           </p>
           {pendingCount > 0 ? (
-            <Link href="/coach" className="mt-4 block">
+            <Link href="/" className="mt-4 block">
               <Card className="flex items-center justify-between gap-3 transition active:scale-[0.99]">
                 <span className="text-sm font-semibold">
-                  {pendingCount} earlier transactions still need answers
+                  {pendingCount} to review on Home
                 </span>
                 <ArrowRight className="size-4 shrink-0 text-ink/35 dark:text-cloud/35" aria-hidden="true" />
               </Card>
@@ -108,10 +108,10 @@ export default function UploadPage() {
           </Card>
           {pendingCount > 0 ? (
             <Link
-              href="/coach"
+              href="/"
               className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.99] dark:bg-cloud dark:text-ink"
             >
-              Review {pendingCount} transactions
+              Review {pendingCount} on Home
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           ) : null}
@@ -168,7 +168,7 @@ export default function UploadPage() {
               <Check className="size-6" aria-hidden="true" />
             </span>
             <p className="mt-3 text-lg font-bold">
-              {result ? `${result.added} new transactions added` : "Already imported"}
+              {result ? `${result.added} new since last upload` : "Already imported"}
             </p>
             {result ? (
               <div className="mx-auto mt-3 max-w-xs space-y-1.5 text-left text-sm text-ink/60 dark:text-cloud/60">
@@ -188,15 +188,21 @@ export default function UploadPage() {
                     {result.autoCategorized} auto-categorized from your rules
                   </p>
                 ) : null}
+                {result.autoApproved > 0 ? (
+                  <p className="flex items-center gap-2">
+                    <Check className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                    {result.autoApproved} high-confidence auto-approved
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </Card>
           {pendingCount > 0 ? (
             <Link
-              href="/coach"
+              href="/"
               className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.99] dark:bg-cloud dark:text-ink"
             >
-              Review {pendingCount} transactions
+              Review {pendingCount} on Home
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           ) : null}

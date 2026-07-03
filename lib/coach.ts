@@ -4,6 +4,7 @@ import {
   getGoalEta,
   monthLabelFromNow,
   statusLabel,
+  type SpendStatus,
   type getDashboardMetrics
 } from "./calculations";
 import type { Debt, SavingsGoal } from "./types";
@@ -85,21 +86,21 @@ function affordabilityReply(text: string, ctx: CoachContext): CoachReply {
   const name = parseItemName(text);
   const { metrics } = ctx;
 
-  if (amount <= metrics.safeToSpendToday) {
+  if (amount <= metrics.safeToday) {
     return {
-      body: `${currency.format(amount)} fits inside today's safe-to-spend (${currency.format(metrics.safeToSpendToday)}). You could buy ${name} today without touching the rest of the month.`
+      body: `${currency.format(amount)} fits inside today's safe-to-spend (${currency.format(metrics.safeToday)}). You could buy ${name} today without eating into the rest of the period.`
     };
   }
 
-  if (amount <= metrics.discretionaryRemaining) {
-    const newDaily = (metrics.discretionaryRemaining - amount) / metrics.daysLeft;
+  if (amount <= metrics.remaining) {
+    const newDaily = (metrics.remaining - amount) / metrics.daysLeft;
     return {
-      body: `You could cover ${currency.format(amount)} for ${name} this month — you have ${currency.format(metrics.discretionaryRemaining)} free after bills. It would lower safe-to-spend to about ${currency.format(newDaily)}/day for the rest of July.`
+      body: `You could cover ${currency.format(amount)} for ${name} this period — you have ${currency.format(metrics.remaining)} left after bills. It would lower safe-to-spend to about ${currency.format(newDaily)}/day for the rest of ${metrics.monthName}.`
     };
   }
 
   return {
-    body: `${currency.format(amount)} for ${name} is more than the ${currency.format(Math.max(metrics.discretionaryRemaining, 0))} you have free this month, so it works better as a savings goal. Pick a pace and I'll set it up:`,
+    body: `${currency.format(amount)} for ${name} is more than the ${currency.format(Math.max(metrics.remaining, 0))} you have left this period, so it works better as a savings goal. Pick a pace and I'll set it up:`,
     goalSuggestion: {
       name: name === "that purchase" ? "New purchase" : capitalize(name),
       targetMxn: Math.round(amount),
@@ -167,17 +168,18 @@ export function askCoach(text: string, ctx: CoachContext): CoachReply {
       .map((c) => `${c.name} ${currency.format(c.amountMxn)} on the ${c.dayOfMonth}`)
       .join(", ");
     return {
-      body: `Still coming this month: ${lines}. All ${currency.format(metrics.committedRemaining)} of that is already reserved out of safe-to-spend.`
+      body: `Still coming this period: ${lines}. All ${currency.format(metrics.committedRemaining)} of that is already reserved out of safe-to-spend.`
     };
   }
 
   if (/safe|today|how am i|doing|track|status|left|budget/.test(q)) {
+    const status = metrics.status as SpendStatus;
     const projection =
-      metrics.projectedRemaining >= 0
-        ? `on pace to end ${metrics.monthName} with ${currency.format(metrics.projectedRemaining)} left`
-        : `on pace to end ${metrics.monthName} about ${currency.format(Math.abs(metrics.projectedRemaining))} over`;
+      metrics.projectedLeftover >= 0
+        ? `on pace to finish this cycle with ${currency.format(metrics.projectedLeftover)} left`
+        : `on pace to finish this cycle about ${currency.format(Math.abs(metrics.projectedLeftover))} over`;
     return {
-      body: `${statusLabel[metrics.spendStatus]}. Safe to spend today is ${currency.format(metrics.safeToSpendToday)}, with ${currency.format(metrics.discretionaryRemaining)} free after bills. You're ${projection}.${metrics.pendingClarifications > 0 ? ` ${metrics.pendingClarifications} answers pending would sharpen this.` : ""}`
+      body: `${statusLabel[status]}. Safe to spend today is ${currency.format(metrics.safeToday)}, with ${currency.format(metrics.remaining)} left this period. You're ${projection}.${metrics.pendingClarifications > 0 ? ` ${metrics.pendingClarifications} to review would sharpen this.` : ""}`
     };
   }
 
