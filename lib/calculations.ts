@@ -118,9 +118,16 @@ export function getDashboardMetrics(
   const { year, month, daysInMonth, daysElapsed, daysLeft, label, monthName } =
     getMonthContext(now);
 
-  // The spend cap is always income minus the savings reserved first, so it
-  // stays consistent whenever the budget is edited.
-  const monthlySpendCap = Math.max(budget.fixedMonthlyIncome - budget.requiredSavings, 0);
+  // The spend cap is base income minus the savings reserved first, plus the
+  // spendable share of this month's commission (the rest is saved).
+  const commission = budget.commissionThisMonth ?? 0;
+  const commissionSaved = commission * budget.commissionSavingsRate;
+  const commissionSpendable = commission - commissionSaved;
+  const monthlySpendCap = Math.max(
+    budget.fixedMonthlyIncome - budget.requiredSavings + commissionSpendable,
+    0
+  );
+  const savedThisMonth = budget.requiredSavings + commissionSaved;
 
   const thisMonth = transactions.filter((tx) => inMonth(tx.transactionDate, year, month));
   const spending = thisMonth.filter(isSpending);
@@ -177,7 +184,11 @@ export function getDashboardMetrics(
     monthName,
     incomeThisMonth: budget.fixedMonthlyIncome,
     requiredSavings: budget.requiredSavings,
-    actualSaved: budget.requiredSavings,
+    actualSaved: savedThisMonth,
+    savedThisMonth,
+    commissionThisMonth: commission,
+    commissionSaved,
+    commissionSpendable,
     monthlySpendCap,
     actualSpend,
     remainingBudget,

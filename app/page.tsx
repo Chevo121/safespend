@@ -116,6 +116,25 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Recent activity — surfaced high for the daily check */}
+      <Section
+        title="Recent activity"
+        action={
+          <Link
+            href="/transactions"
+            className="text-sm font-semibold text-emerald-700 dark:text-emerald-400"
+          >
+            All
+          </Link>
+        }
+      >
+        <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
+          {recent.map((tx) => (
+            <TransactionRow key={tx.id} transaction={tx} />
+          ))}
+        </Card>
+      </Section>
+
       {/* Pending clarifications action card */}
       {metrics.pendingClarifications > 0 ? (
         <Link href="/coach" className="mb-4 block">
@@ -281,25 +300,6 @@ export default function DashboardPage() {
         </Card>
       </Section>
 
-      {/* Recent activity */}
-      <Section
-        title="Recent activity"
-        action={
-          <Link
-            href="/transactions"
-            className="text-sm font-semibold text-emerald-700 dark:text-emerald-400"
-          >
-            All
-          </Link>
-        }
-      >
-        <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
-          {recent.map((tx) => (
-            <TransactionRow key={tx.id} transaction={tx} />
-          ))}
-        </Card>
-      </Section>
-
       {/* Savings */}
       <Card className="mb-2 flex items-center gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
@@ -308,7 +308,8 @@ export default function DashboardPage() {
         <div className="flex-1">
           <p className="font-semibold">Savings target</p>
           <p className="text-xs text-ink/45 dark:text-cloud/45">
-            {currency.format(metrics.requiredSavings)} reserved before spending
+            {currency.format(metrics.savedThisMonth)} set aside this month
+            {metrics.commissionThisMonth > 0 ? " · incl. commission" : ""}
           </p>
         </div>
         <StatusPill tone="safe">On track</StatusPill>

@@ -326,8 +326,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const setBudget = useCallback((patch: Partial<Budget>) => {
     setBudgetState((current) => {
       const next = { ...current, ...patch };
-      // Keep the spend cap consistent: income minus savings reserved first.
-      next.monthlySpendCap = Math.max(next.fixedMonthlyIncome - next.requiredSavings, 0);
+      // Keep the spend cap consistent: income minus savings reserved first,
+      // plus the spendable share of this month's commission.
+      const commissionSpendable =
+        (next.commissionThisMonth ?? 0) * (1 - next.commissionSavingsRate);
+      next.monthlySpendCap = Math.max(
+        next.fixedMonthlyIncome - next.requiredSavings + commissionSpendable,
+        0
+      );
       return next;
     });
   }, []);

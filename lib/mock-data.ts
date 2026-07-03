@@ -4,7 +4,8 @@ export const defaultBudget: Budget = {
   fixedMonthlyIncome: 65000,
   requiredSavings: 16500,
   monthlySpendCap: 48500,
-  commissionSavingsRate: 0.7
+  commissionSavingsRate: 0.7,
+  commissionThisMonth: 0
 };
 
 export const defaultScheduledPayments: ScheduledPayment[] = [

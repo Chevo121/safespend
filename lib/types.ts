@@ -50,6 +50,7 @@ export type Budget = {
   requiredSavings: number;
   monthlySpendCap: number;
   commissionSavingsRate: number;
+  commissionThisMonth: number;
 };
 
 export type ScheduledPayment = {

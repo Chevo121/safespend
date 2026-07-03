@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Wand2, X } from "lucide-react";
 import { Card, ProgressBar, Section } from "@/components/ui";
+import { NumberField } from "@/components/number-field";
 import {
   currency,
   getBudgetGroups,
@@ -46,26 +47,32 @@ export function PlanBudget() {
                 value={budget.requiredSavings}
                 onChange={(value) => setBudget({ requiredSavings: value })}
               />
+              <BudgetField
+                label="Commission this month"
+                value={budget.commissionThisMonth}
+                onChange={(value) => setBudget({ commissionThisMonth: value })}
+              />
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm text-ink/55 dark:text-cloud/55">
                   Commission saved (%)
                 </span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  max="100"
+                <NumberField
+                  allowDecimal={false}
+                  max={100}
+                  ariaLabel="Commission saved percent"
                   value={Math.round(budget.commissionSavingsRate * 100)}
-                  onChange={(event) =>
-                    setBudget({
-                      commissionSavingsRate: Math.min(Math.max(Number(event.target.value), 0), 100) / 100
-                    })
-                  }
+                  onChange={(value) => setBudget({ commissionSavingsRate: value / 100 })}
                   className="tnum min-h-10 w-24 rounded-lg border border-emerald-500/40 bg-white px-3 text-right text-sm font-semibold outline-none focus:border-emerald-500 dark:border-emerald-400/40 dark:bg-white/[0.06]"
                 />
               </label>
+              {metrics.commissionThisMonth > 0 ? (
+                <p className="rounded-lg bg-emerald-500/[0.08] px-3 py-2 text-xs leading-5 text-emerald-800 dark:text-emerald-300">
+                  Commission split: {currency.format(metrics.commissionSpendable)} to spend,{" "}
+                  {currency.format(metrics.commissionSaved)} to savings.
+                </p>
+              ) : null}
               <div className="flex items-center justify-between gap-3 border-t border-black/[0.05] pt-3 text-sm dark:border-white/[0.06]">
-                <span className="font-semibold">Spend cap (income − savings)</span>
+                <span className="font-semibold">Spend cap this month</span>
                 <span className="tnum font-bold">{currency.format(metrics.monthlySpendCap)}</span>
               </div>
             </div>
@@ -77,16 +84,20 @@ export function PlanBudget() {
                   {currency.format(budget.fixedMonthlyIncome)}
                 </span>
               </div>
+              {metrics.commissionThisMonth > 0 ? (
+                <div className="flex justify-between gap-3">
+                  <span className="text-ink/55 dark:text-cloud/55">
+                    Commission this month
+                  </span>
+                  <span className="tnum font-semibold">
+                    +{currency.format(metrics.commissionThisMonth)}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-3">
-                <span className="text-ink/55 dark:text-cloud/55">Savings reserved first</span>
+                <span className="text-ink/55 dark:text-cloud/55">Saved this month</span>
                 <span className="tnum font-semibold text-emerald-700 dark:text-emerald-400">
-                  −{currency.format(budget.requiredSavings)}
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-ink/55 dark:text-cloud/55">Commission saved</span>
-                <span className="tnum font-semibold">
-                  {Math.round(budget.commissionSavingsRate * 100)}%
+                  −{currency.format(metrics.savedThisMonth)}
                 </span>
               </div>
               <div className="flex justify-between gap-3 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
@@ -174,13 +185,11 @@ export function PlanBudget() {
                           {currency.format(row.spent)}
                         </span>
                         /
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min="0"
+                        <NumberField
+                          allowDecimal={false}
                           value={row.limit}
-                          onChange={(event) => setLimit(row.label, Number(event.target.value))}
-                          aria-label={`${row.label} monthly limit`}
+                          onChange={(value) => setLimit(row.label, value)}
+                          ariaLabel={`${row.label} monthly limit`}
                           className="tnum min-h-9 w-24 rounded-lg border border-emerald-500/40 bg-white px-2 text-right text-sm font-semibold outline-none focus:border-emerald-500 dark:border-emerald-400/40 dark:bg-white/[0.06]"
                         />
                       </label>
@@ -251,12 +260,10 @@ function BudgetField({
   return (
     <label className="flex items-center justify-between gap-3">
       <span className="text-sm text-ink/55 dark:text-cloud/55">{label}</span>
-      <input
-        type="number"
-        inputMode="decimal"
-        min="0"
+      <NumberField
         value={value}
-        onChange={(event) => onChange(Math.max(Number(event.target.value), 0))}
+        onChange={onChange}
+        ariaLabel={label}
         className="tnum min-h-10 w-32 rounded-lg border border-emerald-500/40 bg-white px-3 text-right text-sm font-semibold outline-none focus:border-emerald-500 dark:border-emerald-400/40 dark:bg-white/[0.06]"
       />
     </label>
