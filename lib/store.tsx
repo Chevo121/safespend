@@ -75,6 +75,7 @@ type Store = {
   setBudget: (patch: Partial<Budget>) => void;
   setLimit: (label: string, value: number) => void;
   importNextBatch: () => ImportResult | null;
+  importTransactions: (candidates: Transaction[]) => ImportResult;
   resetDemo: () => void;
 };
 
@@ -86,11 +87,104 @@ const isPending = (tx: Transaction) =>
 const fingerprint = (tx: Transaction) =>
   `${tx.merchant}|${tx.amountMxn}|${tx.transactionDate}`;
 
-// Merchants that should always be asked about, even when a rule exists.
+// Merchants that always need an answer (beneficiary or category), so a high
+// OCR-confidence read must not silently auto-approve them.
 const alwaysAsk = (merchant: string) => {
   const m = merchant.toLowerCase();
-  return m.includes("uber") || m.includes("girlfriend") || m.includes("myself");
+  return (
+    m.includes("uber") ||
+    m.includes("amazon") ||
+    m.includes("mercadopago") ||
+    m.includes("apple") ||
+    m.includes("transfer to") ||
+    m.includes("girlfriend") ||
+    m.includes("myself") ||
+    m.includes("didi") ||
+    m.includes("préstamo") ||
+    m.includes("prestamo")
+  );
 };
+
+// Shared import pipeline: drop exact re-imports, flag same-batch twins, apply
+// saved rules, and silently approve high-confidence non-beneficiary merchants.
+function processImport(
+  candidates: Transaction[],
+  existingTxs: Transaction[],
+  rules: MerchantRule[]
+): { fresh: Transaction[]; result: ImportResult } {
+  const existing = new Set(existingTxs.map(fingerprint));
+  const seenInBatch = new Set<string>();
+  const fresh: Transaction[] = [];
+  let duplicatesRemoved = 0;
+  let flaggedDuplicates = 0;
+  let autoCategorized = 0;
+  let autoApproved = 0;
+
+  for (const tx of candidates) {
+    const key = fingerprint(tx);
+
+    if (existing.has(key)) {
+      duplicatesRemoved += 1;
+      continue;
+    }
+
+    if (seenInBatch.has(key)) {
+      flaggedDuplicates += 1;
+      fresh.push({
+        ...tx,
+        status: "duplicate_candidate",
+        needsClarification: true,
+        clarificationQuestion: "Possible duplicate charge"
+      });
+      continue;
+    }
+
+    seenInBatch.add(key);
+
+    const rule = rules.find((r) => r.merchant === tx.merchant);
+    if (rule && tx.status === "needs_review" && !alwaysAsk(tx.merchant)) {
+      autoCategorized += 1;
+      fresh.push({
+        ...tx,
+        category: rule.category,
+        beneficiary: "me",
+        status: "approved",
+        needsClarification: false,
+        clarificationAnswer: `${rule.label} · auto`
+      });
+      continue;
+    }
+
+    if (
+      tx.status === "needs_review" &&
+      !alwaysAsk(tx.merchant) &&
+      tx.confidence >= AUTO_APPROVE_CONFIDENCE
+    ) {
+      autoApproved += 1;
+      fresh.push({
+        ...tx,
+        status: "approved",
+        needsClarification: false,
+        clarificationAnswer: "Auto-approved"
+      });
+      continue;
+    }
+
+    fresh.push(tx);
+  }
+
+  return {
+    fresh,
+    result: {
+      found: candidates.length,
+      added: fresh.length,
+      duplicatesRemoved,
+      flaggedDuplicates,
+      autoCategorized,
+      autoApproved
+    }
+  };
+}
 
 function load<T>(key: string, validate: (value: unknown) => boolean): T | null {
   try {
@@ -339,81 +433,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
 
-    const existing = new Set(transactions.map(fingerprint));
-    const seenInBatch = new Set<string>();
-    const fresh: Transaction[] = [];
-    let duplicatesRemoved = 0;
-    let flaggedDuplicates = 0;
-    let autoCategorized = 0;
-    let autoApproved = 0;
-
-    for (const tx of mockSecondBatch) {
-      const key = fingerprint(tx);
-
-      if (existing.has(key)) {
-        duplicatesRemoved += 1;
-        continue;
-      }
-
-      if (seenInBatch.has(key)) {
-        flaggedDuplicates += 1;
-        fresh.push({
-          ...tx,
-          status: "duplicate_candidate",
-          needsClarification: true,
-          clarificationQuestion: "Possible duplicate charge"
-        });
-        continue;
-      }
-
-      seenInBatch.add(key);
-
-      const rule = rules.find((r) => r.merchant === tx.merchant);
-      if (rule && tx.status === "needs_review" && !alwaysAsk(tx.merchant)) {
-        autoCategorized += 1;
-        fresh.push({
-          ...tx,
-          category: rule.category,
-          beneficiary: "me",
-          status: "approved",
-          needsClarification: false,
-          clarificationAnswer: `${rule.label} · auto`
-        });
-        continue;
-      }
-
-      // High-confidence merchants that don't need a beneficiary answer approve
-      // silently — only new or low-confidence transactions surface for review.
-      if (
-        tx.status === "needs_review" &&
-        !alwaysAsk(tx.merchant) &&
-        tx.confidence >= AUTO_APPROVE_CONFIDENCE
-      ) {
-        autoApproved += 1;
-        fresh.push({
-          ...tx,
-          status: "approved",
-          needsClarification: false,
-          clarificationAnswer: "Auto-approved"
-        });
-        continue;
-      }
-
-      fresh.push(tx);
-    }
-
+    const { fresh, result } = processImport(mockSecondBatch, transactions, rules);
     setTransactions((current) => [...fresh, ...current]);
     setBatches(2);
-
-    return {
-      found: mockSecondBatch.length,
-      added: fresh.length,
-      duplicatesRemoved,
-      flaggedDuplicates,
-      autoCategorized,
-      autoApproved
-    };
+    return result;
   }, [batches, transactions, rules]);
+
+  const importTransactions = useCallback(
+    (candidates: Transaction[]): ImportResult => {
+      const { fresh, result } = processImport(candidates, transactions, rules);
+      setTransactions((current) => [...fresh, ...current]);
+      return result;
+    },
+    [transactions, rules]
+  );
 
   const resetDemo = useCallback(() => {
     setTransactions(mockTransactions);
@@ -450,6 +483,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setBudget,
       setLimit,
       importNextBatch,
+      importTransactions,
       resetDemo
     }),
     [
@@ -479,6 +513,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setBudget,
       setLimit,
       importNextBatch,
+      importTransactions,
       resetDemo
     ]
   );
