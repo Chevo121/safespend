@@ -10,15 +10,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#101218",
-        moss: "#425740",
-        mint: "#9DE6BF",
-        coral: "#F27F6F",
-        lemon: "#F3D66B",
-        cloud: "#F6F5EF"
+        ink: "#111318",
+        cloud: "#F2F3F5"
       },
       boxShadow: {
-        soft: "0 18px 60px rgba(16, 18, 24, 0.12)"
+        soft: "0 18px 60px rgba(17, 19, 24, 0.10)",
+        card: "0 1px 2px rgba(17, 19, 24, 0.05), 0 8px 24px rgba(17, 19, 24, 0.05)"
       }
     }
   },

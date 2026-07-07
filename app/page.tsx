@@ -1,79 +1,281 @@
-import Link from "next/link";
-import { ArrowRight, ShieldCheck, UploadCloud } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
-import { PrimaryLink, Section, StatusPill } from "@/components/ui";
-import { getDashboardMetrics, currency } from "@/lib/calculations";
+"use client";
 
-export default function Home() {
-  const metrics = getDashboardMetrics();
+import Link from "next/link";
+import { CalendarClock, Camera, ChevronRight, PiggyBank, Target, Wallet } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
+import { AnimatedCurrency } from "@/components/animated-number";
+import { InlineReview } from "@/components/inline-review";
+import { TransactionRow } from "@/components/transaction-row";
+import { Card, ProgressBar, Section, StatusPill } from "@/components/ui";
+import {
+  currency,
+  getBudgetGroups,
+  getDashboardMetrics,
+  getGoalEta,
+  getProgressTone,
+  statusLabel
+} from "@/lib/calculations";
+import { useStore } from "@/lib/store";
+
+const heroAccent: Record<string, string> = {
+  safe: "from-emerald-500/20",
+  tight: "from-amber-500/15",
+  over: "from-rose-500/20"
+};
+
+const heroPill: Record<string, string> = {
+  safe: "text-emerald-300",
+  tight: "text-amber-300",
+  over: "text-rose-300"
+};
+
+export default function DashboardPage() {
+  const { transactions, payments, debts, goals, limits, budget } = useStore();
+  const metrics = getDashboardMetrics(transactions, payments, debts, budget);
+
+  const categoryRows = getBudgetGroups(transactions, limits, new Date(), budget.payDay)
+    .filter((group) => group.name !== "Girlfriend")
+    .flatMap((group) => group.rows)
+    .filter((row) => row.spent > 0)
+    .sort((a, b) => b.spent - a.spent)
+    .slice(0, 5);
+
+  const recent = transactions.slice(0, 4);
+  const nextCommitments = metrics.upcomingCommitments.slice(0, 3);
+  const topGoals = goals.slice(0, 2);
+  const cushionPositive = metrics.cushion >= 0;
 
   return (
-    <AppShell title="SafeSpend" activePath="/">
-      <section className="pb-4">
-        <div className="overflow-hidden rounded-lg bg-ink p-5 text-white dark:bg-white dark:text-ink">
-          <div className="flex items-center justify-between gap-4">
-            <span className="grid size-12 place-items-center rounded-2xl bg-mint text-ink">
-              <ShieldCheck className="size-6" aria-hidden="true" />
-            </span>
-            <StatusPill tone="good">ARQ + DolarApp</StatusPill>
-          </div>
-          <h1 className="mt-6 text-4xl font-semibold tracking-normal">SafeSpend</h1>
-          <p className="mt-3 text-sm leading-6 text-white/72 dark:text-ink/70">
-            Turn wallet screenshots into reviewed spending, girlfriend tracking, and a daily safe-to-spend number.
-          </p>
-          <div className="mt-6 flex flex-col gap-3">
-            <PrimaryLink href="/upload">
-              <span className="inline-flex items-center gap-2">
-                Start screenshot flow <ArrowRight className="size-4" aria-hidden="true" />
-              </span>
-            </PrimaryLink>
-            <Link
-              href="/dashboard"
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/16 px-5 text-sm font-semibold dark:border-ink/12"
-            >
-              View dashboard
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <Section title="Today">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-black/8 bg-white/74 p-4 dark:border-white/10 dark:bg-white/5">
-            <p className="text-xs text-ink/54 dark:text-cloud/58">Safe today</p>
-            <p className="mt-2 text-2xl font-semibold">{currency.format(metrics.safeToSpendToday)}</p>
-          </div>
-          <div className="rounded-lg border border-black/8 bg-white/74 p-4 dark:border-white/10 dark:bg-white/5">
-            <p className="text-xs text-ink/54 dark:text-cloud/58">Needs review</p>
-            <p className="mt-2 text-2xl font-semibold">{metrics.pendingClarifications}</p>
-          </div>
-        </div>
-      </Section>
-
-      <Section title="Phase 1 flow">
-        <div className="space-y-3">
-          {["Upload a screenshot", "Extract mocked transactions", "Clarify ambiguous spending", "Update dashboard metrics"].map(
-            (item, index) => (
-              <div
-                key={item}
-                className="flex items-center gap-3 rounded-lg border border-black/8 bg-white/70 p-3 dark:border-white/10 dark:bg-white/5"
+    <AppShell
+      title="Today"
+      subtitle={`${metrics.periodLabel} · Day ${metrics.daysElapsed} of ${metrics.daysInPeriod}`}
+    >
+      {/* Hero: safe to spend today = today's rate + cushion */}
+      {metrics.hasBudget ? (
+        <div className="relative mb-4 overflow-hidden rounded-3xl bg-ink p-6 text-white shadow-soft dark:bg-white/[0.07] dark:shadow-none">
+          <div
+            className={`pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b to-transparent ${heroAccent[metrics.status]}`}
+          />
+          <div className="relative">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-white/60">Safe to spend today</p>
+              <span
+                className={`inline-flex items-center rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold ${heroPill[metrics.status]}`}
               >
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-mint font-semibold text-ink">
-                  {index + 1}
-                </span>
-                <span className="font-medium">{item}</span>
-              </div>
-            )
-          )}
+                {statusLabel[metrics.status]}
+              </span>
+            </div>
+            <AnimatedCurrency
+              value={metrics.safeToday}
+              className="tnum mt-2 block text-5xl font-bold tracking-tight"
+            />
+            <p className="mt-2 text-sm text-white/55">
+              {currency.format(metrics.rateToday)} today
+              {cushionPositive
+                ? ` + ${currency.format(metrics.cushion)} cushion`
+                : ` − ${currency.format(-metrics.cushion)} over`}
+            </p>
+          </div>
         </div>
+      ) : (
+        <Link href="/plan#budget" className="mb-4 block">
+          <div className="relative overflow-hidden rounded-3xl bg-ink p-6 text-white shadow-soft transition active:scale-[0.99] dark:bg-white/[0.07] dark:shadow-none">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/10 text-emerald-300">
+                <Wallet className="size-5" aria-hidden="true" />
+              </span>
+              <div className="flex-1">
+                <p className="font-semibold">Set your income to see safe-to-spend</p>
+                <p className="mt-0.5 text-sm text-white/55">
+                  Takes a few seconds in Budget.
+                </p>
+              </div>
+              <ChevronRight className="size-5 shrink-0 text-white/40" aria-hidden="true" />
+            </div>
+          </div>
+        </Link>
+      )}
+
+      {/* Demoted "this month" strip */}
+      {metrics.hasBudget ? (
+        <Card className="mb-4 grid grid-cols-2 gap-3 py-3">
+          <div className="border-r border-black/[0.06] pr-3 dark:border-white/[0.08]">
+            <p className="text-xs font-medium text-ink/45 dark:text-cloud/45">Left this period</p>
+            <p className="tnum mt-0.5 font-semibold">{currency.format(metrics.remaining)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-ink/45 dark:text-cloud/45">Projected end</p>
+            <p
+              className={`tnum mt-0.5 font-semibold ${
+                metrics.projectionStatus === "over"
+                  ? "text-rose-600 dark:text-rose-400"
+                  : metrics.projectionStatus === "tight"
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
+              {metrics.projectedLeftover >= 0
+                ? `${currency.format(metrics.projectedLeftover)} left`
+                : `${currency.format(-metrics.projectedLeftover)} over`}
+            </p>
+          </div>
+        </Card>
+      ) : null}
+
+      {/* Inline review — clarify in place */}
+      <InlineReview />
+
+      {/* Recent activity — surfaced high for the daily check */}
+      <Section
+        title="Recent activity"
+        action={
+          <Link
+            href="/transactions"
+            className="text-sm font-semibold text-emerald-700 dark:text-emerald-400"
+          >
+            All
+          </Link>
+        }
+      >
+        <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
+          {recent.map((tx) => (
+            <TransactionRow key={tx.id} transaction={tx} />
+          ))}
+        </Card>
       </Section>
 
-      <div className="rounded-lg border border-dashed border-moss/40 p-4 dark:border-mint/40">
-        <UploadCloud className="size-5 text-moss dark:text-mint" aria-hidden="true" />
-        <p className="mt-2 text-sm text-ink/62 dark:text-cloud/66">
-          Phase 1 uses local mock data only. No Supabase, no OCR service, and no AI API calls are connected.
-        </p>
-      </div>
+      {/* Upcoming bills & debt payments */}
+      {nextCommitments.length > 0 ? (
+        <Link href="/plan#bills" className="mb-7 block">
+          <Card className="transition active:scale-[0.99]">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sky-500/12 text-sky-600 dark:text-sky-400">
+                <CalendarClock className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">Upcoming bills</p>
+                <p className="mt-0.5 text-xs text-ink/45 dark:text-cloud/45">
+                  {currency.format(metrics.committedRemaining)} reserved this period
+                </p>
+              </div>
+              <ChevronRight className="size-5 shrink-0 text-ink/35 dark:text-cloud/35" aria-hidden="true" />
+            </div>
+            <div className="mt-3 space-y-2 border-t border-black/[0.05] pt-3 dark:border-white/[0.06]">
+              {nextCommitments.map((commitment) => (
+                <div key={commitment.id} className="flex items-center gap-3 text-sm">
+                  <span className="tnum grid w-9 shrink-0 place-items-center rounded-lg bg-black/[0.05] py-1 text-xs font-bold text-ink/60 dark:bg-white/[0.08] dark:text-cloud/60">
+                    {commitment.dayOfMonth}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {commitment.name}
+                    {commitment.kind === "debt" ? (
+                      <span className="ml-1.5 text-xs text-rose-500">debt</span>
+                    ) : null}
+                  </span>
+                  <span className="tnum shrink-0 font-semibold">
+                    {currency.format(commitment.amountMxn)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </Link>
+      ) : null}
+
+      {/* Goals */}
+      {topGoals.length > 0 ? (
+        <Section
+          title="Goals"
+          action={
+            <Link
+              href="/plan#goals"
+              className="text-sm font-semibold text-emerald-700 dark:text-emerald-400"
+            >
+              All goals
+            </Link>
+          }
+        >
+          <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
+            {topGoals.map((goal) => {
+              const eta = getGoalEta(goal);
+              const percent = goal.targetMxn > 0 ? goal.savedMxn / goal.targetMxn : 0;
+
+              return (
+                <div key={goal.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
+                    <Target className="size-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="truncate font-semibold">{goal.name}</p>
+                      <p className="tnum shrink-0 text-xs text-ink/45 dark:text-cloud/45">
+                        {eta.monthsLeft === 0 ? "Funded" : eta.label}
+                      </p>
+                    </div>
+                    <ProgressBar percent={percent} tone="safe" className="mt-2" />
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+        </Section>
+      ) : null}
+
+      {/* Category spend */}
+      {categoryRows.length > 0 ? (
+        <Section
+          title="Where it's going"
+          action={
+            <Link href="/plan#budget" className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+              Budget
+            </Link>
+          }
+        >
+          <Card className="divide-y divide-black/[0.05] p-0 dark:divide-white/[0.06]">
+            {categoryRows.map((row) => {
+              const percent = row.limit > 0 ? row.spent / row.limit : 0;
+
+              return (
+                <div key={row.label} className="px-4 py-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="text-sm font-semibold">{row.label}</p>
+                    <p className="tnum text-sm text-ink/55 dark:text-cloud/55">
+                      <span className="font-semibold text-ink dark:text-cloud">
+                        {currency.format(row.spent)}
+                      </span>{" "}
+                      / {currency.format(row.limit)}
+                    </p>
+                  </div>
+                  <ProgressBar percent={percent} tone={getProgressTone(percent)} className="mt-2" />
+                </div>
+              );
+            })}
+          </Card>
+        </Section>
+      ) : null}
+
+      {/* Savings */}
+      <Card className="mb-2 flex items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
+          <PiggyBank className="size-5" aria-hidden="true" />
+        </span>
+        <div className="flex-1">
+          <p className="font-semibold">Savings reserved</p>
+          <p className="text-xs text-ink/45 dark:text-cloud/45">
+            {currency.format(metrics.savingsReserved)} set aside before spending
+          </p>
+        </div>
+        <StatusPill tone="safe">Reserved</StatusPill>
+      </Card>
+
+      {/* Floating upload action */}
+      <Link
+        href="/upload"
+        aria-label="Upload screenshot"
+        className="fixed bottom-24 right-5 z-40 grid size-14 place-items-center rounded-full bg-emerald-600 text-white shadow-soft transition hover:bg-emerald-500 active:scale-95 sm:right-[calc(50%-13rem)]"
+      >
+        <Camera className="size-6" aria-hidden="true" />
+      </Link>
     </AppShell>
   );
 }
